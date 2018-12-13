@@ -37,4 +37,4 @@ Known bugs
 
 Releases
 ----------
-2018-12-13: Initial release
+2018-12-13: Initial release (1.0.0)
