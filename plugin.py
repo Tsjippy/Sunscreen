@@ -16,13 +16,17 @@
         </ul>
         <h3>Configuration</h3>
         Fill in how often the sunscreen device should change.<br/>
-        Fill in your thresholds in this order: Azimut low;Azimut high; Altitude low; Altitude mid; Altidtude high;Lux low; Lux high;Temp low; Temp high;Wind;Gust;Rain<br/>
-        Fill in your weatherdevice names in this order: Temperature device;Wind device;Rain device;Pressure device<br/>
+        Fill in your sun thresholds in this order: Azimut low;Azimut high; Altitude low; Altitude mid; Altidtude high<br/>
+        If you need more sunscreens, just add 5 extra sun thresholds like this:<br/>
+        Azimut1 low;Azimut1 high; Altitude1 low; Altitude1 mid; Altidtude1 high;Azimut2 low;Azimut2 high; Altitude2 low; Altitude2 mid; Altidtude2 high<br/>
+        Fill in your weather thresholds in this order: Lux low; Lux high;Temp low; Temp high;Wind;Gust;Rain<br/>
+        Fill in your weatherdevice names in this order: Pressure device;Temperature device;Wind device;Rain device<br/>
     </description>
     <params>
-        <param field="Mode2" label="Switchtime threshold (minutes)" width="400px" required="true" default="30"/>
-        <param field="Mode3" label="Thresholds" width="500px" required="true" default=""/>
-        <param field="Mode4" label="Wheater devices" width="500px" required="true" default="Temp;Wind;Rain;Pressure"/>
+        <param field="Mode1" label="Switchtime threshold (minutes)" width="200px" required="true" default="30"/>
+        <param field="Mode2" label="Sun thresholds" width="1000px" default="Azimut low;Azimut high; Altitude low; Altitude mid; Altidtude high"/>
+        <param field="Mode3" label="Weather thresholds" width="1000px" default=""/>
+        <param field="Mode4" label="Wheater devices" width="1000px" required="true" default="Pressure;Temp;Wind;Rain"/>
         <param field="Mode5" label="Domoticz url and port" width="200px" required="true" default="http://127.0.0.1:8080"/>
     </params>
 </plugin>
@@ -38,8 +42,11 @@ import calendar
 from urllib.request import urlopen
 #sudo pip3 install lxml -t /home/pi/domoticz/plugins/Sunscreen
 #sudo pip3 install pandas -t /home/pi/domoticz/plugins/Sunscreen
+#sudo pip3 install html5lib -t /home/pi/domoticz/plugins/Sunscreen
 #sudo apt-get install libatlas-base-dev
 import pandas
+from multiprocessing import Process, Queue
+import time
 
 class BasePlugin:
     enabled = False
@@ -48,6 +55,7 @@ class BasePlugin:
         return
 
     def onStart(self):
+        global q
         self.Error=False
         self.ArbitraryTwilightLux=6.32     # W/m² egal 800 Lux     (the theoritical value is 4.74 but I have more accurate result with 6.32...)
         self.ConstantSolarRadiation = 1361 # Solar Constant W/m²
@@ -59,86 +67,67 @@ class BasePlugin:
             self.DaysInYear=365
         self.AgularSpeed = 360/365.25
         self.Declinaison = math.degrees(math.asin(0.3978 * math.sin(math.radians(self.AgularSpeed) *(self.Yearday - (81 - 2 * math.sin((math.radians(self.AgularSpeed) * (self.Yearday - 2))))))))
-        
+        Domoticz.Heartbeat(30)
+        self.JustSun=False
+        self.Station=""
         #Domoticz.Trace(True)
-        createDevices()
 
         try:
             if not "Location" in Settings:
                 self.Error="Location not set in Settings, please update your settings."
                 Domoticz.Error(self.Error)
             else:
-                Domoticz.Heartbeat(30)
                 loc = Settings["Location"].split(";")
                 self.Latitude=float(loc[0])
                 self.Longitude=float(loc[1])
                 Domoticz.Log("Current location is "+str(self.Latitude)+","+str(self.Latitude))
+                q = Queue()
+                self.p = Process(target=self.FindStation, args=(q,))
+                self.p.deamon=True
+                self.p.start()
+                Domoticz.Log("Started search for Ogimet station.")
 
-                self.switchtime=int(Parameters["Mode2"])
+                self.switchtime=int(Parameters["Mode1"])
                 self.Thresholds={}
-                thresholds=Parameters["Mode3"].split(";")
-                devices=Parameters["Mode4"].split(";")
+                SunThresholds=Parameters["Mode2"].split(";")
+                WeatherThresholds=Parameters["Mode3"].split(";")
+                self.WeatherDevices=Parameters["Mode4"].split(";")
                 self.url=Parameters["Mode5"]
-                self.Altitude=Altitude()
+                #self.Altitude=Altitude()
+                self.Altitude=1
                 Domoticz.Log("Found altitude of "+str(self.Altitude)+" meter")
 
-                self.Thresholds["azimuth"]=[thresholds[0],thresholds[1]]
-                self.Thresholds["alltitude"]=[thresholds[2],thresholds[3],thresholds[4]]
-                self.Thresholds["lux"]=[thresholds[5],thresholds[6]]
-                self.Thresholds["temp"]=[thresholds[7],thresholds[8]]
-                self.Thresholds["wind"]=thresholds[9]
-                self.Thresholds["gust"]=thresholds[10]
-                self.Thresholds["rain"]=thresholds[11]
-
-                Domoticz.Log("Will only perform an action every "+str(self.switchtime)+" minutes.")
-                Domoticz.Log("Will only close the sunscreen if the azimuth is between "+self.Thresholds["azimuth"][0]+" and "+self.Thresholds["azimuth"][1]+" degrees, the altitude is between "+self.Thresholds["alltitude"][0]+" and "+self.Thresholds["alltitude"][2]+" degrees, the temperature is above "+self.Thresholds["temp"][1]+" degrees and the amount of lux is between "+self.Thresholds["lux"][0]+" and "+self.Thresholds["lux"][1]+" lux")
-                Domoticz.Log("Will open the sunscreen if it is raining, the temprerture drops below "+self.Thresholds["temp"][0]+", the wind is more than "+self.Thresholds["wind"]+" or the gust are more than "+self.Thresholds["gust"]+"")
-
-                if len(devices)==4:
-                    self.TemperatureDevice=devices[0]
-                    self.WindDevice=devices[1]
-                    self.RainDevice=devices[2]
-                    self.PressureDevice=devices[3]
+                if SunThresholds==[""]:
+                    self.JustSun=True
+                    Domoticz.Status("No sun thresholds are given, so no sunscreen device will be created.")
                 else:
-                    self.Error="You should specify a temperature, wind, rain and pressure device, but you only defined "+str(len(devices))+" devices. Please update the hardware settings of this plugin."
-                    Domoticz.Error(self.Error)
+                    self.NumberOfSunscreens=int(len(SunThresholds)/5)
+                    for i in range(self.NumberOfSunscreens):
+                        self.Thresholds["azimuth"+str(i)]=[SunThresholds[i],SunThresholds[i+1]]
+                        self.Thresholds["alltitude"+str(i)]=[SunThresholds[i+2],SunThresholds[i+3],SunThresholds[i+4]]
 
-                if self.Error==False:
-                    AllDevices = requests.get(url=self.url+"/json.htm?type=devices&used=true").json()['result']
-                    for device in AllDevices:
-                        if device["Name"]==self.TemperatureDevice:
-                            self.TemperatureIDX=device["idx"]
-                            self.Temperature=device["Temp"] 
-                            Domoticz.Log("Found temperature device '"+self.TemperatureDevice+ "' Current temperature: "+str(self.Temperature))
-                        if device["Name"]==self.WindDevice:
-                            self.WindIDX=device["idx"]
-                            self.Wind=device["Data"].split(";")[2]
-                            self.Gust=device["Data"].split(";")[3]
-                            Domoticz.Log("Found wind device '"+self.WindDevice+"' current wind: "+str(self.Wind)+". Current wind gust: " +str(self.Gust))
-                        if device["Name"]==self.RainDevice:
-                            self.RainIDX=device["idx"]
-                            self.Rain=device["Data"]
-                            Domoticz.Log("Found rain device '"+self.RainDevice+"' current expected rain: "+str(self.Rain))
-                        if device["Name"]==self.PressureDevice:
-                            self.PressureIDX=device["idx"]
-                            self.Pressure=device["Barometer"]
-                            Domoticz.Log("Found pressure device '"+self.PressureDevice+"' current pressure: "+str(self.Pressure))
+                if WeatherThresholds!=[""] and self.JustSun==False:
+                    self.Thresholds["lux"]=[WeatherThresholds[0],WeatherThresholds[1]]
+                    self.Thresholds["temp"]=[WeatherThresholds[2],WeatherThresholds[3]]
+                    self.Thresholds["wind"]=WeatherThresholds[4]
+                    self.Thresholds["gust"]=WeatherThresholds[5]
+                    self.Thresholds["rain"]=WeatherThresholds[6]
+                elif (WeatherThresholds==[""]):
+                    self.JustSun=True
+                    Domoticz.Status("No weather thresholds are given, so no sunscreen device will be created.")     
 
-                    try:
-                        self.TemperatureIDX
-                        self.WindIDX
-                        self.RainIDX
-                        self.PressureIDX
-                    except AttributeError as Error:
-                        device=str(Error).split("'")[3].replace("IDX","")
-                        self.Error="Could not find "+getattr(self, device+"Device",device)+" device, please make sure it exists."
-                        Domoticz.Error(self.Error)
+                if self.JustSun==False:
+                    Domoticz.Log("Will only perform an action every "+str(self.switchtime)+" minutes.")
+                    for i in range(self.NumberOfSunscreens):
+                        Domoticz.Log("Will only close sunscreen"+str(i)+" if the azimuth is between "+self.Thresholds["azimuth"+str(i)][0]+" and "+self.Thresholds["azimuth"+str(i)][1]+" degrees, the altitude is between "+self.Thresholds["alltitude"+str(i)][0]+" and "+self.Thresholds["alltitude"+str(i)][2]+" degrees, the temperature is above "+self.Thresholds["temp"][1]+" degrees and the amount of lux is between "+self.Thresholds["lux"][0]+" and "+self.Thresholds["lux"][1]+" lux")
+                    Domoticz.Log("Will open a sunscreen if it is raining, the temprerture drops below "+self.Thresholds["temp"][0]+", the wind is more than "+self.Thresholds["wind"]+" or the gust are more than "+self.Thresholds["gust"]+"")
 
-                if self.Error==False:
-                    self.Station = ""
-                    self.Station=FindStation()
-                    Domoticz.Log("Station is "+self.Station)
+                    self.CheckWeatherDevices()
+
+                    createDevices()
+                    #self.Station=FindStation()
         except Exception as e:
+            self.Error="Something went wrong during boot. Please chack the logs."
             senderror(e)
 
     def onStop(self):
@@ -160,28 +149,140 @@ class BasePlugin:
         Domoticz.Log("onDisconnect called")
 
     def onHeartbeat(self):
+        global q
         if self.Error==False:
             try:
-                self.Temperature=requests.get(url=self.url+"/json.htm?type=devices&rid="+self.TemperatureIDX).json()['result'][0]["Temp"]
-                Wind=requests.get(url=self.url+"/json.htm?type=devices&rid="+self.WindIDX).json()['result'][0]["Data"].split(";")
-                self.Wind=Wind[2]
-                self.Gust=Wind[3]
-                self.Rain=requests.get(url=self.url+"/json.htm?type=devices&rid="+self.RainIDX).json()['result'][0]["Data"]
-                self.Pressure=requests.get(url=self.url+"/json.htm?type=devices&rid="+self.PressureIDX).json()['result'][0]["Barometer"]
+                if self.p.exitcode == None or self.Station=="":
+                    if q.empty()==True:
+                        Domoticz.Log("Parsing station table data, please wait.")
+                    while q.empty()==False:
+                        result=str(q.get())
+                        if "Error" in result:
+                            Domoticz.Error(result)
+                            self.Error="Could not find Ogimet station."
+                        elif "Station is:" in result:
+                            Domoticz.Status(result)
+                            self.Station=result.split(" ")[2]
+                        else:
+                            Domoticz.Log(result)
+                elif (self.Station!=""):
+                    self.Pressure=requests.get(url=self.url+"/json.htm?type=devices&rid="+self.PressureIDX).json()['result'][0]["Barometer"]
 
-                SunLocation()
+                    SunLocation()
 
-                Cloudlayer()
-                Domoticz.Log("Current cloudlayer is "+str(self.Octa))
+                    Cloudlayer()
+                    #Domoticz.Log("Current cloudlayer is "+str(self.Octa))
 
-                VirtualLux()
+                    VirtualLux()
+
+                    if self.JustSun==False:
+                        self.Temperature=requests.get(url=self.url+"/json.htm?type=devices&rid="+self.TemperatureIDX).json()['result'][0]["Temp"]
+                        Wind=requests.get(url=self.url+"/json.htm?type=devices&rid="+self.WindIDX).json()['result'][0]["Data"].split(";")
+                        self.Wind=Wind[2]
+                        self.Gust=Wind[3]
+                        self.Rain=requests.get(url=self.url+"/json.htm?type=devices&rid="+self.RainIDX).json()['result'][0]["Data"]
             except Exception as e:
                 senderror(e)
         else:
             Domoticz.Error(self.Error)
 
+    def CheckWeatherDevices(self):
+        if len(self.WeatherDevices)==1:
+            self.PressureDevice=self.WeatherDevices[0]
+            self.TemperatureDevice=""
+            self.WindDevice=""
+            self.RainDevice=""
+            self.JustSun=True
+            Domoticz.Status("Just found one weatherdevice, so no sunscreen device will be created.")
+        elif len(self.WeatherDevices)==4:
+            self.PressureDevice=self.WeatherDevices[0]
+            self.TemperatureDevice=self.WeatherDevices[1]
+            self.WindDevice=self.WeatherDevices[2]
+            self.RainDevice=self.WeatherDevices[3]
+        else:
+            self.Error="You should specify at least a pressure device, and optional a temperature, wind and rain device, but you defined "+str(len(devices))+" devices. Please update the hardware settings of this plugin."
+            Domoticz.Error(self.Error)
+
+        if self.Error==False:
+            AllDevices = requests.get(url=self.url+"/json.htm?type=devices&used=true").json()['result']
+            for device in AllDevices:
+                if device["Name"]==self.TemperatureDevice:
+                    self.TemperatureIDX=device["idx"]
+                    self.Temperature=device["Temp"] 
+                    Domoticz.Log("Found temperature device '"+self.TemperatureDevice+ "' Current temperature: "+str(self.Temperature))
+                if device["Name"]==self.WindDevice:
+                    self.WindIDX=device["idx"]
+                    self.Wind=device["Data"].split(";")[2]
+                    self.Gust=device["Data"].split(";")[3]
+                    Domoticz.Log("Found wind device '"+self.WindDevice+"' current wind: "+str(self.Wind)+". Current wind gust: " +str(self.Gust))
+                if device["Name"]==self.RainDevice:
+                    self.RainIDX=device["idx"]
+                    self.Rain=device["Data"]
+                    Domoticz.Log("Found rain device '"+self.RainDevice+"' current expected rain: "+str(self.Rain))
+                if device["Name"]==self.PressureDevice:
+                    self.PressureIDX=device["idx"]
+                    self.Pressure=device["Barometer"]
+                    Domoticz.Log("Found pressure device '"+self.PressureDevice+"' current pressure: "+str(self.Pressure))
+            try:
+                self.PressureIDX
+                if self.JustSun==False:
+                    self.TemperatureIDX
+                    self.WindIDX
+                    self.RainIDX
+            except AttributeError as Error:
+                device=str(Error).split("'")[3].replace("IDX","")
+                self.Error="Could not find "+getattr(self, device+"Device",device)+" device, please make sure it exists."
+                Domoticz.Error(self.Error)
+
+    def FindStation(self,q):
+        try:
+            #Find Country
+            url="https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat="+str(self.Latitude)+"&lon="+str(self.Longitude)+"&accept-language=en-US"
+            #Domoticz.Log("Location url is "+url)
+            country=requests.get(url).json()["address"]["country"]
+            q.put("Country is "+country)
+            #Find Ogimet station
+            #url="http://www.ogimet.com/display_stations.php?lang=en&tipo=AND&isyn=&oaci=&nombre=&estado="+country+"&Send=Send"
+            #q.put("url is "+url)
+            #Parse the table
+            html = requests.get(url).content
+            df_list = pandas.read_html(html)
+            mindist=1000
+
+            q.put("Calculating which station is the closest")
+            station="No station found."
+            latdegree= int(str(self.Latitude).split(".")[0])
+            if latdegree < 0:
+                latdegree*=-1
+
+            for i, Latitude in enumerate(df_list[1][4]):
+                if str(latdegree) in Latitude:
+                    #Convert from DMS to decimal coordinates
+                    degrees=Latitude.split("-")[0]
+                    minutes=Latitude.split("-")[1][:-1]
+                    lat = float(degrees) + float(minutes)/60
+                    if self.Latitude <0:
+                        lat*=-1
+                    degrees=df_list[1][5][i].split("-")[0]
+                    minutes=df_list[1][5][i].split("-")[1][:-1]
+                    lon = float(degrees) + float(minutes)/60
+                    if self.Longitude <0:
+                        lon*=-1
+                    #Calculate the distance
+                    #q.put("Coordinates used are: "+str(self.Latitude)+ ","+str(self.Longitude)+" and "+str(lat)+","+str(lon))
+                    dist = haversine(self.Latitude, self.Longitude, lat, lon)
+                    #q.put("Afstand is "+str(dist))
+                    if dist<mindist:
+                        mindist=dist
+                        station=df_list[1][0][i]
+            q.put("Found station "+station+" on "+str(round(mindist,1))+"km of your location.",True)
+            #return station
+            q.put("Station is: "+str(station),True)
+        except Exception as e:
+            q.put('Error on line {}'.format(sys.exc_info()[-1].tb_lineno)+" Error is: " +str(e))
 
 global _plugin
+global q
 _plugin = BasePlugin()
 
 def onStart():
@@ -262,7 +363,7 @@ def Cloudlayer():
         UTC=str(UTC.year)+str(UTC.month)+str(UTC.day)+hour+"00"
 
         url="http://www.ogimet.com/cgi-bin/getsynop?block="+_plugin.Station+"&begin="+UTC
-        #Domoticz.Log("Cloudlayer url is "+url)
+        Domoticz.Log("Cloudlayer url is "+url)
         result=urlopen(url).read().decode('utf-8').split(" "+_plugin.Station+" ")[1].split(" ")[0][0]
         _plugin.Octa=int(result)
     except Exception as e:
@@ -286,8 +387,8 @@ def VirtualLux():
         elif _plugin.sunAltitude <= 1 and _plugin.sunAltitude >= -7: #apply theoretical Lux of twilight
             directRadiation = 0
             scatteredRadiation = 0
-            arbitraryTwilightLux=arbitraryTwilightLux-(1-_plugin.sunAltitude)/8*arbitraryTwilightLux
-            totalRadiation = scatteredRadiation + directRadiation + arbitraryTwilightLux 
+            _plugin.ArbitraryTwilightLux=_plugin.ArbitraryTwilightLux-(1-_plugin.sunAltitude)/8*_plugin.ArbitraryTwilightLux
+            totalRadiation = scatteredRadiation + directRadiation + _plugin.ArbitraryTwilightLux 
             Lux = totalRadiation / 0.0079 # Radiation in Lux. 1 Lux = 0,0079 W/m²
             weightedLux = Lux * Kc   #radiation of the Sun with the cloud layer
         elif _plugin.sunAltitude < -7:  # no management of nautical and astronomical twilight...
@@ -298,38 +399,7 @@ def VirtualLux():
             weightedLux = 0  #  should be around 3,2 Lux for the nautic twilight. Nevertheless.
         
         UpdateDevice(3,int(round(weightedLux)),int(round(weightedLux)))
-        Domoticz.Log("Virtual LUX is "+str(round(weightedLux)))
-
-def FindStation():
-    global _plugin
-    try:
-        #Find Country
-        url="https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat="+str(_plugin.Latitude)+"&lon="+str(_plugin.Longitude)+"&accept-language=en-US"
-        #Domoticz.Log("Location url is "+url)
-        country=requests.get(url).json()["address"]["country"]
-        Domoticz.Log("Country is "+country)
-
-        #Find Ogimet station
-        url="http://www.ogimet.com/display_stations.php?lang=en&tipo=AND&isyn=&oaci=&nombre=&estado="+country+"&Send=Send"
-        #Domoticz.Log("url is "+url)
-        #Parse the table
-        html = requests.get(url).content
-        df_list = pandas.read_html(html)
-
-        mindist=1000
-        for i, Latitude in enumerate(df_list[1][4]):
-            if "51-" in Latitude:
-                lat=str(Latitude.replace("N","").replace("-","."))[:5]
-                lon = str(df_list[1][5][i].replace("E","").replace("-","."))[:5]
-                dist = haversine(_plugin.Latitude, _plugin.Longitude, float(lat), float(lon))
-                if dist<mindist:
-                    mindist=dist
-                    station=df_list[1][0][i]
-        Domoticz.Log("Found station "+station+" on "+str(round(mindist,1))+"km of your location.")
-        return station
-    except Exception as e:
-        senderror(e)
-        return "12840"
+        #Domoticz.Log("Virtual LUX is "+str(round(weightedLux)))
 
 #
 # Calculate the great circle distance between two points
@@ -357,12 +427,22 @@ def Altitude():
             'Content-Type': 'application/json',
         }
         data = '{"locations":[{"latitude":'+str(_plugin.Latitude)+',"longitude":'+str(_plugin.Longitude)+'}]}'
-        response = requests.post('https://api.open-elevation.com/api/v1/lookup', headers=headers, data=data).json()
-        Altitude=int(response["results"][0]['elevation'])
+        q = Queue()
+        p = Process(target=GetResponse, args=(q,headers,data))
+        p.deamon=True
+        p.start()
+        Altitude=int(q.get())
+        p.terminate()
+
         return Altitude
     except Exception as e:
         senderror(e)
         return 0
+
+def GetResponse(q,headers,data):
+    response = requests.post('https://api.open-elevation.com/api/v1/lookup', headers=headers, data=data).json()
+    Altitude=int(response["results"][0]['elevation'])
+    q.put(Altitude)
 
 def createDevices():
     global _plugin
@@ -383,11 +463,14 @@ def createDevices():
             Domoticz.Device(Name="Virtual Lux", Unit=3, Type=246, Subtype=1, Used=1).Create()
             UpdateImage(3, 'ChromecastLogo')
 
-        if 4 not in Devices:
-            Domoticz.Log("Created 'Sunscreen' device")
-            Domoticz.Device(Name="Sunscreen", Unit=4, TypeName="Switch", Switchtype=13, Used=1).Create()
-            UpdateImage(4, 'ChromecastLogo')
-
+        if _plugin.JustSun==False:
+            Domoticz.Log("Checking sunscreen devices")
+            for i in range(_plugin.NumberOfSunscreens):
+                x=i+4
+                if x not in Devices:
+                    Domoticz.Log("Created 'Sunscreen"+str(i)+"' device")
+                    Domoticz.Device(Name="Sunscreen"+str(i), Unit=x, TypeName="Switch", Switchtype=13, Used=1).Create()
+                    UpdateImage(x, 'ChromecastLogo')
     except Exception as e:
         senderror(e)
 
@@ -406,7 +489,7 @@ def UpdateImage(Unit, Logo):
 def UpdateDevice(Unit, nValue, sValue, AlwaysUpdate=False):
     # Make sure that the Domoticz device still exists (they can be deleted) before updating it
     if Unit in Devices:
-        if Devices[Unit].nValue != nValue or Devices[Unit].sValue != sValue or AlwaysUpdate == True:
+        if Devices[Unit].nValue != nValue or Devices[Unit].sValue != str(sValue) or AlwaysUpdate == True:
             Devices[Unit].Update(nValue, str(sValue))
             Domoticz.Log("Update " + Devices[Unit].Name + ": " + str(nValue) + " - '" + str(sValue) + "'")
     return
