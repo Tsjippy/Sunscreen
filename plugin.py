@@ -43,6 +43,7 @@ from urllib.request import urlopen
 #sudo pip3 install lxml -t /home/pi/domoticz/plugins/Sunscreen
 #sudo pip3 install pandas -t /home/pi/domoticz/plugins/Sunscreen
 #sudo pip3 install html5lib -t /home/pi/domoticz/plugins/Sunscreen
+#sudo pip3 install BeautifulSoup4 -t /home/pi/domoticz/plugins/Sunscreen
 #sudo apt-get install libatlas-base-dev
 import pandas
 from multiprocessing import Process, Queue
@@ -55,7 +56,8 @@ class BasePlugin:
         return
 
     def onStart(self):
-        global q
+        global q1
+        global q2
         self.Error=False
         self.ArbitraryTwilightLux=6.32     # W/m² egal 800 Lux     (the theoritical value is 4.74 but I have more accurate result with 6.32...)
         self.ConstantSolarRadiation = 1361 # Solar Constant W/m²
@@ -70,6 +72,7 @@ class BasePlugin:
         Domoticz.Heartbeat(30)
         self.JustSun=False
         self.Station=""
+        self.Altitude=""
         #Domoticz.Trace(True)
 
         try:
@@ -80,12 +83,19 @@ class BasePlugin:
                 loc = Settings["Location"].split(";")
                 self.Latitude=float(loc[0])
                 self.Longitude=float(loc[1])
-                Domoticz.Log("Current location is "+str(self.Latitude)+","+str(self.Latitude))
-                q = Queue()
-                self.p = Process(target=self.FindStation, args=(q,))
-                self.p.deamon=True
-                self.p.start()
+                Domoticz.Log("Current location is "+str(self.Latitude)+","+str(self.Longitude))
+                q1 = Queue()
+                self.p1 = Process(target=self.FindStation, args=(q1,))
+                self.p1.deamon=True
+                self.p1.start()
                 Domoticz.Log("Started search for Ogimet station.")
+
+                q2 = Queue()
+                self.p2 = Process(target=Altitude, args=(q2,))
+                self.p2.deamon=True
+                self.p2.start()
+                Domoticz.Log("Started search for Altitude.")
+                #self.Altitude=1
 
                 self.switchtime=int(Parameters["Mode1"])
                 self.Thresholds={}
@@ -93,8 +103,7 @@ class BasePlugin:
                 WeatherThresholds=Parameters["Mode3"].split(";")
                 self.WeatherDevices=Parameters["Mode4"].split(";")
                 self.url=Parameters["Mode5"]
-                #self.Altitude=Altitude()
-                self.Altitude=1
+
                 Domoticz.Log("Found altitude of "+str(self.Altitude)+" meter")
 
                 if SunThresholds==[""]:
@@ -120,7 +129,7 @@ class BasePlugin:
                     Domoticz.Log("Will only perform an action every "+str(self.switchtime)+" minutes.")
                     for i in range(self.NumberOfSunscreens):
                         Domoticz.Log("Will only close sunscreen"+str(i)+" if the azimuth is between "+self.Thresholds["azimuth"+str(i)][0]+" and "+self.Thresholds["azimuth"+str(i)][1]+" degrees, the altitude is between "+self.Thresholds["alltitude"+str(i)][0]+" and "+self.Thresholds["alltitude"+str(i)][2]+" degrees, the temperature is above "+self.Thresholds["temp"][1]+" degrees and the amount of lux is between "+self.Thresholds["lux"][0]+" and "+self.Thresholds["lux"][1]+" lux")
-                    Domoticz.Log("Will open a sunscreen if it is raining, the temprerture drops below "+self.Thresholds["temp"][0]+", the wind is more than "+self.Thresholds["wind"]+" or the gust are more than "+self.Thresholds["gust"]+"")
+                    Domoticz.Log("Will open a sunscreen if it is raining, the temperature drops below "+self.Thresholds["temp"][0]+", the wind is more than "+self.Thresholds["wind"]+" or the gust are more than "+self.Thresholds["gust"]+"")
 
                     self.CheckWeatherDevices()
 
@@ -149,22 +158,27 @@ class BasePlugin:
         Domoticz.Log("onDisconnect called")
 
     def onHeartbeat(self):
-        global q
+        global q1
+        global q2
+
         if self.Error==False:
             try:
-                if self.p.exitcode == None or self.Station=="":
-                    if q.empty()==True:
-                        Domoticz.Log("Parsing station table data, please wait.")
-                    while q.empty()==False:
-                        result=str(q.get())
+                if self.p1.exitcode == None or self.Station=="":
+                    if q1.empty()==True:
+                        Domoticz.Log("Parsing Ogimet station table data.")
+                    while q1.empty()==False:
+                        result=str(q1.get())
                         if "Error" in result:
                             Domoticz.Error(result)
                             self.Error="Could not find Ogimet station."
-                        elif "Station is:" in result:
-                            Domoticz.Status(result)
+                        elif "Found station " in result:
+                            Domoticz.Log(result)
                             self.Station=result.split(" ")[2]
                         else:
                             Domoticz.Log(result)
+                if self.p2.exitcode != None and self.Altitude=="":
+                    self.Altitude=q2.get()
+                    Domoticz.Log("Altitude is "+str(self.Altitude)+" meter.")
                 elif (self.Station!=""):
                     self.Pressure=requests.get(url=self.url+"/json.htm?type=devices&rid="+self.PressureIDX).json()['result'][0]["Barometer"]
 
@@ -240,9 +254,9 @@ class BasePlugin:
             url="https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat="+str(self.Latitude)+"&lon="+str(self.Longitude)+"&accept-language=en-US"
             #Domoticz.Log("Location url is "+url)
             country=requests.get(url).json()["address"]["country"]
-            q.put("Country is "+country)
+            q.put("Checking all Ogimet stations in "+country+" to find the one closest to your location.")
             #Find Ogimet station
-            #url="http://www.ogimet.com/display_stations.php?lang=en&tipo=AND&isyn=&oaci=&nombre=&estado="+country+"&Send=Send"
+            url="http://www.ogimet.com/display_stations.php?lang=en&tipo=AND&isyn=&oaci=&nombre=&estado="+country+"&Send=Send"
             #q.put("url is "+url)
             #Parse the table
             html = requests.get(url).content
@@ -269,20 +283,24 @@ class BasePlugin:
                     if self.Longitude <0:
                         lon*=-1
                     #Calculate the distance
-                    #q.put("Coordinates used are: "+str(self.Latitude)+ ","+str(self.Longitude)+" and "+str(lat)+","+str(lon))
                     dist = haversine(self.Latitude, self.Longitude, lat, lon)
-                    #q.put("Afstand is "+str(dist))
+
+                    #If it is the smallest distance so far
                     if dist<mindist:
-                        mindist=dist
-                        station=df_list[1][0][i]
+                        #Check if station has data
+                        url="https://www.ogimet.com/cgi-bin/gsynres?lang=en&ind="+df_list[1][0][i]
+                        result=urlopen(url).read().decode('utf-8')
+                        if not "No valid data found in database for " in result:
+                            #Use station
+                            mindist=dist
+                            station=df_list[1][0][i]
             q.put("Found station "+station+" on "+str(round(mindist,1))+"km of your location.",True)
-            #return station
-            q.put("Station is: "+str(station),True)
         except Exception as e:
             q.put('Error on line {}'.format(sys.exc_info()[-1].tb_lineno)+" Error is: " +str(e))
 
 global _plugin
-global q
+global q1
+global q2
 _plugin = BasePlugin()
 
 def onStart():
@@ -355,51 +373,59 @@ def SunLocation():
 def Cloudlayer():
     global _plugin
     try:
+        result=""
         UTC=datetime.datetime.utcnow()
-        if len(str(UTC.hour-1))==1:
-            hour="0"+str(UTC.hour-1)
-        else:
-            hour=str(UTC.hour-1)
-        UTC=str(UTC.year)+str(UTC.month)+str(UTC.day)+hour+"00"
+        hour=UTC.hour
 
-        url="http://www.ogimet.com/cgi-bin/getsynop?block="+_plugin.Station+"&begin="+UTC
-        Domoticz.Log("Cloudlayer url is "+url)
-        result=urlopen(url).read().decode('utf-8').split(" "+_plugin.Station+" ")[1].split(" ")[0][0]
-        _plugin.Octa=int(result)
+        while result=="":
+            if len(str(int(hour)-1))==1:
+                hour="0"+str(int(hour)-1)
+            else:
+                hour=str(int(hour)-1)
+            UTCtime=str(UTC.year)+str(UTC.month)+str(UTC.day)+hour+"00"
+            url="http://www.ogimet.com/cgi-bin/getsynop?block="+_plugin.Station+"&begin="+UTCtime
+            result=urlopen(url).read().decode('utf-8')
+
+        _plugin.Octa=int(result.split(" "+_plugin.Station+" ")[1].split(" ")[0][0])
     except Exception as e:
+        Domoticz.Log("Cloudlayer url is "+url)
+        Domoticz.Log(str(result)+str(result==""))
         senderror(e)
 
 def VirtualLux():
         global _plugin
-        RadiationAtm = _plugin.ConstantSolarRadiation * (1 +0.034 * math.cos( math.radians( 360 * _plugin.Yearday / _plugin.DaysInYear )))   
-        absolutePressure = _plugin.Pressure - round((_plugin.Altitude/ 8.3),1) # hPa
-        sinusSunAltitude = math.sin(math.radians(_plugin.sunAltitude))
-        M0 = math.sqrt(1229 + math.pow(614 * sinusSunAltitude,2)) - 614 * sinusSunAltitude
-        M = M0 * _plugin.Pressure/absolutePressure
-        
-        Kc=1-0.75*math.pow(_plugin.Octa/8,3.4)  # Factor of mitigation for the cloud layer
-        if _plugin.sunAltitude > 1: # Below 1° of Altitude , the formulae reach their limit of precision.
-            directRadiation = RadiationAtm * math.pow(0.6,M) * sinusSunAltitude
-            scatteredRadiation = RadiationAtm * (0.271 - 0.294 * math.pow(0.6,M)) * sinusSunAltitude
-            totalRadiation = scatteredRadiation + directRadiation
-            Lux = totalRadiation / 0.0079  # Radiation in Lux. 1 Lux = 0,0079 W/m²
-            weightedLux = Lux * Kc   # radiation of the Sun with the cloud layer
-        elif _plugin.sunAltitude <= 1 and _plugin.sunAltitude >= -7: #apply theoretical Lux of twilight
-            directRadiation = 0
-            scatteredRadiation = 0
-            _plugin.ArbitraryTwilightLux=_plugin.ArbitraryTwilightLux-(1-_plugin.sunAltitude)/8*_plugin.ArbitraryTwilightLux
-            totalRadiation = scatteredRadiation + directRadiation + _plugin.ArbitraryTwilightLux 
-            Lux = totalRadiation / 0.0079 # Radiation in Lux. 1 Lux = 0,0079 W/m²
-            weightedLux = Lux * Kc   #radiation of the Sun with the cloud layer
-        elif _plugin.sunAltitude < -7:  # no management of nautical and astronomical twilight...
-            directRadiation = 0
-            scatteredRadiation = 0
-            totalRadiation = 0
-            Lux = 0
-            weightedLux = 0  #  should be around 3,2 Lux for the nautic twilight. Nevertheless.
-        
-        UpdateDevice(3,int(round(weightedLux)),int(round(weightedLux)))
-        #Domoticz.Log("Virtual LUX is "+str(round(weightedLux)))
+        try:
+            RadiationAtm = _plugin.ConstantSolarRadiation * (1 +0.034 * math.cos( math.radians( 360 * _plugin.Yearday / _plugin.DaysInYear )))   
+            absolutePressure = _plugin.Pressure - round((_plugin.Altitude/ 8.3),1) # hPa
+            sinusSunAltitude = math.sin(math.radians(_plugin.sunAltitude))
+            M0 = math.sqrt(1229 + math.pow(614 * sinusSunAltitude,2)) - 614 * sinusSunAltitude
+            M = M0 * _plugin.Pressure/absolutePressure
+            
+            Kc=1-0.75*math.pow(_plugin.Octa/8,3.4)  # Factor of mitigation for the cloud layer
+            if _plugin.sunAltitude > 1: # Below 1° of Altitude , the formulae reach their limit of precision.
+                directRadiation = RadiationAtm * math.pow(0.6,M) * sinusSunAltitude
+                scatteredRadiation = RadiationAtm * (0.271 - 0.294 * math.pow(0.6,M)) * sinusSunAltitude
+                totalRadiation = scatteredRadiation + directRadiation
+                Lux = totalRadiation / 0.0079  # Radiation in Lux. 1 Lux = 0,0079 W/m²
+                weightedLux = Lux * Kc   # radiation of the Sun with the cloud layer
+            elif _plugin.sunAltitude <= 1 and _plugin.sunAltitude >= -7: #apply theoretical Lux of twilight
+                directRadiation = 0
+                scatteredRadiation = 0
+                _plugin.ArbitraryTwilightLux=_plugin.ArbitraryTwilightLux-(1-_plugin.sunAltitude)/8*_plugin.ArbitraryTwilightLux
+                totalRadiation = scatteredRadiation + directRadiation + _plugin.ArbitraryTwilightLux 
+                Lux = totalRadiation / 0.0079 # Radiation in Lux. 1 Lux = 0,0079 W/m²
+                weightedLux = Lux * Kc   #radiation of the Sun with the cloud layer
+            elif _plugin.sunAltitude < -7:  # no management of nautical and astronomical twilight...
+                directRadiation = 0
+                scatteredRadiation = 0
+                totalRadiation = 0
+                Lux = 0
+                weightedLux = 0  #  should be around 3,2 Lux for the nautic twilight. Nevertheless.
+            
+            UpdateDevice(3,int(round(weightedLux)),int(round(weightedLux)))
+            #Domoticz.Log("Virtual LUX is "+str(round(weightedLux)))
+        except Exception as e:
+            senderror(e)
 
 #
 # Calculate the great circle distance between two points
@@ -419,7 +445,7 @@ def haversine(lat1, lon1, lat2, lon2):
     km = c * 6367
     return km    
 
-def Altitude():
+def Altitude(q):
     global _plugin
     try:
         headers = {
@@ -427,22 +453,11 @@ def Altitude():
             'Content-Type': 'application/json',
         }
         data = '{"locations":[{"latitude":'+str(_plugin.Latitude)+',"longitude":'+str(_plugin.Longitude)+'}]}'
-        q = Queue()
-        p = Process(target=GetResponse, args=(q,headers,data))
-        p.deamon=True
-        p.start()
-        Altitude=int(q.get())
-        p.terminate()
-
-        return Altitude
+        response = requests.post('https://api.open-elevation.com/api/v1/lookup', headers=headers, data=data).json()
+        Altitude=int(response["results"][0]['elevation'])
+        q.put(Altitude)
     except Exception as e:
-        senderror(e)
-        return 0
-
-def GetResponse(q,headers,data):
-    response = requests.post('https://api.open-elevation.com/api/v1/lookup', headers=headers, data=data).json()
-    Altitude=int(response["results"][0]['elevation'])
-    q.put(Altitude)
+        q.put('Error on line {}'.format(sys.exc_info()[-1].tb_lineno)+" Error is: " +str(e))
 
 def createDevices():
     global _plugin
@@ -454,8 +469,8 @@ def createDevices():
             UpdateImage(1, 'ChromecastLogo')
 
         if 2 not in Devices:
-            Domoticz.Log("Created 'Altitude' device")
-            Domoticz.Device(Name="Altitude", Unit=2, TypeName="Custom", Used=1).Create()
+            Domoticz.Log("Created 'Sun altitude' device")
+            Domoticz.Device(Name="Sun altitude", Unit=2, TypeName="Custom", Used=1).Create()
             UpdateImage(2, 'ChromecastLogo')
 
         if 3 not in Devices:
