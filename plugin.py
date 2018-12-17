@@ -95,7 +95,6 @@ class BasePlugin:
                 self.p2.deamon=True
                 self.p2.start()
                 Domoticz.Log("Started search for Altitude.")
-                #self.Altitude=1
 
                 self.switchtime=int(Parameters["Mode1"])
                 self.Thresholds={}
@@ -103,8 +102,6 @@ class BasePlugin:
                 WeatherThresholds=Parameters["Mode3"].split(";")
                 self.WeatherDevices=Parameters["Mode4"].split(";")
                 self.url=Parameters["Mode5"]
-
-                Domoticz.Log("Found altitude of "+str(self.Altitude)+" meter")
 
                 if SunThresholds==[""]:
                     self.JustSun=True
@@ -142,20 +139,8 @@ class BasePlugin:
     def onStop(self):
         Domoticz.Log("onStop called")
 
-    def onConnect(self, Connection, Status, Description):
-        Domoticz.Log("onConnect called")
-
-    def onMessage(self, Connection, Data):
-        Domoticz.Log("onMessage called")
-
     def onCommand(self, Unit, Command, Level, Hue):
         Domoticz.Log("onCommand called for Unit " + str(Unit) + ": Parameter '" + str(Command) + "', Level: " + str(Level))
-
-    def onNotification(self, Name, Subject, Text, Status, Priority, Sound, ImageFile):
-        Domoticz.Log("Notification: " + Name + "," + Subject + "," + Text + "," + Status + "," + str(Priority) + "," + Sound + "," + ImageFile)
-
-    def onDisconnect(self, Connection):
-        Domoticz.Log("onDisconnect called")
 
     def onHeartbeat(self):
         global q1
@@ -177,7 +162,7 @@ class BasePlugin:
                         else:
                             Domoticz.Log(result)
                 if self.p2.exitcode != None and self.Altitude=="":
-                    self.Altitude=q2.get()
+                    self.Altitude=int(q2.get())
                     Domoticz.Log("Altitude is "+str(self.Altitude)+" meter.")
                 elif (self.Station!=""):
                     self.Pressure=requests.get(url=self.url+"/json.htm?type=devices&rid="+self.PressureIDX).json()['result'][0]["Barometer"]
@@ -311,25 +296,9 @@ def onStop():
     global _plugin
     _plugin.onStop()
 
-def onConnect(Connection, Status, Description):
-    global _plugin
-    _plugin.onConnect(Connection, Status, Description)
-
-def onMessage(Connection, Data):
-    global _plugin
-    _plugin.onMessage(Connection, Data)
-
 def onCommand(Unit, Command, Level, Hue):
     global _plugin
     _plugin.onCommand(Unit, Command, Level, Hue)
-
-def onNotification(Name, Subject, Text, Status, Priority, Sound, ImageFile):
-    global _plugin
-    _plugin.onNotification(Name, Subject, Text, Status, Priority, Sound, ImageFile)
-
-def onDisconnect(Connection):
-    global _plugin
-    _plugin.onDisconnect(Connection)
 
 def onHeartbeat():
     global _plugin
@@ -454,7 +423,7 @@ def Altitude(q):
         }
         data = '{"locations":[{"latitude":'+str(_plugin.Latitude)+',"longitude":'+str(_plugin.Longitude)+'}]}'
         response = requests.post('https://api.open-elevation.com/api/v1/lookup', headers=headers, data=data).json()
-        Altitude=int(response["results"][0]['elevation'])
+        Altitude=response["results"][0]['elevation']
         q.put(Altitude)
     except Exception as e:
         q.put('Error on line {}'.format(sys.exc_info()[-1].tb_lineno)+" Error is: " +str(e))
