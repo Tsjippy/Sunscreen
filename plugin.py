@@ -42,8 +42,6 @@ import calendar
 from urllib.request import urlopen
 #sudo pip3 install lxml -t /home/pi/domoticz/plugins/Sunscreen
 #sudo pip3 install pandas -t /home/pi/domoticz/plugins/Sunscreen
-#sudo pip3 install html5lib -t /home/pi/domoticz/plugins/Sunscreen
-#sudo pip3 install BeautifulSoup4 -t /home/pi/domoticz/plugins/Sunscreen
 #sudo apt-get install libatlas-base-dev
 import pandas
 from multiprocessing import Process, Queue
