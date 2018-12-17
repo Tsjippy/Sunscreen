@@ -279,7 +279,8 @@ class BasePlugin:
                             #Use station
                             mindist=dist
                             station=df_list[1][0][i]
-            q.put("Found station "+station+" on "+str(round(mindist,1))+"km of your location.",True)
+                            stationname=df_list[1][2][i]
+            q.put("Found station "+stationname+" with id:"+station+" on "+str(round(mindist,1))+"km of your location.",True)
         except Exception as e:
             q.put('Error on line {}'.format(sys.exc_info()[-1].tb_lineno)+" Error is: " +str(e))
 
