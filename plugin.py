@@ -2,7 +2,7 @@
 # Author: Tsjippy
 #
 """
-<plugin key="SunScreen" name="Sunscreen plugin" author="Tsjippy" version="1.0.2" wikilink="http://www.domoticz.com/wiki/plugins/plugin.html" externallink="https://wiki.domoticz.com/wiki/Real-time_solar_data_without_any_hardware_sensor_:_azimuth,_Altitude,_Lux_sensor...">
+<plugin key="SunScreen" name="Sunscreen plugin" author="Tsjippy" version="1.0.3" wikilink="http://www.domoticz.com/wiki/plugins/plugin.html" externallink="https://wiki.domoticz.com/wiki/Real-time_solar_data_without_any_hardware_sensor_:_azimuth,_Altitude,_Lux_sensor...">
     <description>
         <h2>Sunscreen plugin</h2><br/>
         This plugin calculates the virtual amount of LUX on your current location<br/>
@@ -19,7 +19,7 @@
         Fill in your sun thresholds in this order: Azimut low;Azimut high; Altitude low; Altitude mid; Altidtude high<br/>
         If you need more sunscreens, just add 5 extra sun thresholds like this:<br/>
         Azimut1 low;Azimut1 high; Altitude1 low; Altitude1 mid; Altidtude1 high;Azimut2 low;Azimut2 high; Altitude2 low; Altitude2 mid; Altidtude2 high<br/>
-        Fill in your weather thresholds in this order: Lux low; Lux high;Temp low; Temp high;Wind;Gust;Rain<br/>
+        Fill in your weather thresholds in this order: Lux low; Lux high;Temp low (°C); Temp high (°C);Wind (m/s);Gust(m/s);Rain(mm)<br/>
         Fill in your weatherdevice names in this order: Pressure device;Temperature device;Wind device;Rain device<br/>
     </description>
     <params>
@@ -47,6 +47,85 @@ import pandas
 from multiprocessing import Process, Queue
 import time
 
+class Sunscreen:
+    global _plugin
+    def __init__(self,DeviceID,AzimutThresholds,AltitudeThresholds):
+        self.DeviceID=DeviceID
+        self.AzimutThresholds=AzimutThresholds
+        self.AltitudeThresholds=AltitudeThresholds
+        self.SunScreenState="Off"
+        self.LastUpdateTime=datetime.datetime.now().replace(second=0, microsecond=0)
+        self.name="Sunscreen"+str(DeviceID-4)
+
+    def CheckClose(self):
+        try:
+            # If screen is down, check if it needs to go up due to the wheater
+            if self.SunScreenState!="Off":
+                if _plugin.Wind > _plugin.Thresholds["wind"] or _plugin.Gust > _plugin.Thresholds["gust"]:
+                    Domoticz.Status("Opening "+self.name+" because of the wind. ("+str(_plugin.Wind)+" m/s).")
+                    ShouldOpen = True
+                elif _plugin.Rain > _plugin.Thresholds["rain"]:
+                    Domoticz.Status("Opening "+self.name+" because of the rain.("+str(_plugin.Rain)+" mm).")
+                    ShouldOpen = True
+                elif _plugin.weightedLux < _plugin.Thresholds["lux"][0]:
+                    Domoticz.Status("Opening "+self.name+" because of the light intensity. ("+str(_plugin.weightedLux)+" lux).")
+                    ShouldOpen = True
+
+                if ShouldOpen == True:
+                    UpdateDevice(self.DeviceID, 0, "Off")
+                    self.SunScreenState="Off"
+                    self.LastUpdateTime=datetime.datetime.now().replace(second=0, microsecond=0)
+                elif _plugin.HeartbeatCount==0:
+                    self.CheckOpen()
+        except Exception as e:
+            senderror(e)
+
+    def CheckOpen(self):
+        try:
+            fmt = '%Y-%m-%d %H:%M:%S'
+            d1 = datetime.datetime.strptime(self.LastUpdateTime, fmt)
+            d2 = datetime.datetime.strptime(datetime.datetime.now(), fmt)
+            LastChanged=int(round((d2-d1).seconds/60))
+            
+            #Only change when last change was more than x minutes ago
+            if LastChanged > _plugin.switchtime:
+                #Only close sunscreen if the sun is in a specific region
+                if _plugin.Azimuth > self.AzimutThresholds[0] and _plugin.Azimuth < self.AzimutThresholds[1] and _plugin.sunAltitude > self.AltitudeThresholds[0] and _plugin.sunAltitude < self.AltitudeThresholds[2]:
+                    Domoticz.Log("Sun is in region")
+                    #Only close if weather is ok
+                    if _plugin.Wind <= _plugin.Thresholds["wind"]:
+                        if _plugin.Gust <= _plugin.Thresholds["gust"]:
+                            if _plugin.Rain <= _plugin.Thresholds["rain"]:
+                                if _plugin.weightedLux > _plugin.Thresholds["lux"][1] or _plugin.Temperature > _plugin.Thresholds["temp"][1]:
+                                    #--------------------   Close sunscreen   -------------------- 
+                                    if _plugin.sunAltitude > self.AltitudeThresholds[1] and self.SunScreenState != 50:
+                                        Domoticz.Log ("Half closing "+self.name+".")
+                                        UpdateDevice(self.DeviceID, 50, "50")
+                                        self.LastUpdateTime=datetime.datetime.now().replace(second=0, microsecond=0)
+                                    elif (self.SunScreenState == "Off") and _plugin.sunAltitude < self.AltitudeThresholds[1]:
+                                        Domoticz.Log ("Full closing "+self.name+".")
+                                        UpdateDevice(self.DeviceID, 100, "On")
+                                        self.LastUpdateTime=datetime.datetime.now().replace(second=0, microsecond=0)
+                                    else:
+                                        Domoticz.Log(self.name+" is already down.")
+                                else:
+                                    Domoticz.Log("Not closing "+self.name+" because of the amount of LUX.")
+                            else:
+                                Domoticz.Log("Not closing "+self.name+" because of the rain.")
+                        else:
+                            Domoticz.Log("Not closing "+self.name+" because of the windgusts.")
+                    else:
+                        Domoticz.Log("Not closing "+self.name+" because of the windspeed.")
+                #Sun is not in the region
+                elif self.SunScreenState!="Off":
+                    Domoticz.Log("Opening "+self.name+", as it is no longer needed.")
+                else:
+                    Domoticz.Log("No need to close the "+self.name+".")
+            else:
+                Domoticz.Log("Last change was less than "+_plugin.switchtime+" minutes ago, no action will be performed.")
+        except Exception as e:
+            senderror(e)
+
 class BasePlugin:
     enabled = False
     def __init__(self):
@@ -54,8 +133,6 @@ class BasePlugin:
         return
 
     def onStart(self):
-        global q1
-        global q2
         self.Error=False
         self.ArbitraryTwilightLux=6.32     # W/m² egal 800 Lux     (the theoritical value is 4.74 but I have more accurate result with 6.32...)
         self.ConstantSolarRadiation = 1361 # Solar Constant W/m²
@@ -71,6 +148,10 @@ class BasePlugin:
         self.JustSun=False
         self.Station=""
         self.Altitude=""
+        self.Octa=""
+        self.HeartbeatCount=0
+        self.SunScreenState="Off"
+        self.Sunscreens=[]
         #Domoticz.Trace(True)
 
         try:
@@ -82,14 +163,14 @@ class BasePlugin:
                 self.Latitude=float(loc[0])
                 self.Longitude=float(loc[1])
                 Domoticz.Log("Current location is "+str(self.Latitude)+","+str(self.Longitude))
-                q1 = Queue()
-                self.p1 = Process(target=self.FindStation, args=(q1,))
+                self.q1 = Queue()
+                self.p1 = Process(target=self.FindStation, args=(self.q1,))
                 self.p1.deamon=True
                 self.p1.start()
                 Domoticz.Log("Started search for Ogimet station.")
 
-                q2 = Queue()
-                self.p2 = Process(target=Altitude, args=(q2,))
+                self.q2 = Queue()
+                self.p2 = Process(target=Altitude, args=(self.q2,))
                 self.p2.deamon=True
                 self.p2.start()
                 Domoticz.Log("Started search for Altitude.")
@@ -111,11 +192,11 @@ class BasePlugin:
                         self.Thresholds["alltitude"+str(i)]=[SunThresholds[i+2],SunThresholds[i+3],SunThresholds[i+4]]
 
                 if WeatherThresholds!=[""] and self.JustSun==False:
-                    self.Thresholds["lux"]=[WeatherThresholds[0],WeatherThresholds[1]]
-                    self.Thresholds["temp"]=[WeatherThresholds[2],WeatherThresholds[3]]
-                    self.Thresholds["wind"]=WeatherThresholds[4]
-                    self.Thresholds["gust"]=WeatherThresholds[5]
-                    self.Thresholds["rain"]=WeatherThresholds[6]
+                    self.Thresholds["lux"]=[int(WeatherThresholds[0]),int(WeatherThresholds[1])]
+                    self.Thresholds["temp"]=[int(WeatherThresholds[2]),int(WeatherThresholds[3])]
+                    self.Thresholds["wind"]=int(WeatherThresholds[4])
+                    self.Thresholds["gust"]=int(WeatherThresholds[5])
+                    self.Thresholds["rain"]=int(WeatherThresholds[6])
                 elif (WeatherThresholds==[""]):
                     self.JustSun=True
                     Domoticz.Status("No weather thresholds are given, so no sunscreen device will be created.")     
@@ -123,8 +204,8 @@ class BasePlugin:
                 if self.JustSun==False:
                     Domoticz.Log("Will only perform an action every "+str(self.switchtime)+" minutes.")
                     for i in range(self.NumberOfSunscreens):
-                        Domoticz.Log("Will only close sunscreen"+str(i)+" if the azimuth is between "+self.Thresholds["azimuth"+str(i)][0]+" and "+self.Thresholds["azimuth"+str(i)][1]+" degrees, the altitude is between "+self.Thresholds["alltitude"+str(i)][0]+" and "+self.Thresholds["alltitude"+str(i)][2]+" degrees, the temperature is above "+self.Thresholds["temp"][1]+" degrees and the amount of lux is between "+self.Thresholds["lux"][0]+" and "+self.Thresholds["lux"][1]+" lux")
-                    Domoticz.Log("Will open a sunscreen if it is raining, the temperature drops below "+self.Thresholds["temp"][0]+", the wind is more than "+self.Thresholds["wind"]+" or the gust are more than "+self.Thresholds["gust"]+"")
+                        Domoticz.Log("Will only close sunscreen"+str(i)+" if the azimuth is between "+str(self.Thresholds["azimuth"+str(i)][0])+" and "+str(self.Thresholds["azimuth"+str(i)][1])+" degrees, the altitude is between "+str(self.Thresholds["alltitude"+str(i)][0])+" and "+str(self.Thresholds["alltitude"+str(i)][2])+" degrees, the temperature is above "+str(self.Thresholds["temp"][1])+" degrees and the amount of lux is between "+str(self.Thresholds["lux"][0])+" and "+str(self.Thresholds["lux"][1])+" lux")
+                    Domoticz.Log("Will open a sunscreen if it is raining, the temperature drops below "+str(self.Thresholds["temp"][0])+" °C, the wind is more than "+str(self.Thresholds["wind"])+" m/s or the gust are more than "+str(self.Thresholds["gust"])+" m/s")
 
                     self.CheckWeatherDevices()
 
@@ -138,98 +219,124 @@ class BasePlugin:
         Domoticz.Log("onStop called")
 
     def onCommand(self, Unit, Command, Level, Hue):
-        Domoticz.Log("onCommand called for Unit " + str(Unit) + ": Parameter '" + str(Command) + "', Level: " + str(Level))
+
+        if str(Command)=='Set Level':
+            self.Sunscreens[Unit-4].SunScreenState=str(Level)
+            UpdateDevice(Unit, Level, "On")
+        else:
+            self.Sunscreens[Unit-4].SunScreenState=str(Command)
+            UpdateDevice(Unit, 0, str(Command))
+
+
+        #Domoticz.Status("Value of "+Devices[Unit].Name + " is set to " + self.Sunscreens[Unit-4].SunScreenState + (str(Devices[Unit])))
+
+        self.Sunscreens[Unit-4].LastUpdateTime=datetime.datetime.now().replace(second=0, microsecond=0)
 
     def onHeartbeat(self):
-        global q1
-        global q2
-
         if self.Error==False:
             try:
                 if self.p1.exitcode == None or self.Station=="":
-                    if q1.empty()==True:
+                    if self.q1.empty()==True:
                         Domoticz.Log("Parsing Ogimet station table data.")
-                    while q1.empty()==False:
-                        result=str(q1.get())
+                    while self.q1.empty()==False:
+                        result=str(self.q1.get())
                         if "Error" in result:
                             Domoticz.Error(result)
                             self.Error="Could not find Ogimet station."
                         elif "Found station " in result:
                             Domoticz.Log(result)
-                            self.Station=result.split(" ")[2]
+                            self.Station=result.split(":")[1].split(" ")[0]
                         else:
                             Domoticz.Log(result)
                 if self.p2.exitcode != None and self.Altitude=="":
-                    self.Altitude=int(q2.get())
-                    Domoticz.Log("Altitude is "+str(self.Altitude)+" meter.")
-                elif (self.Station!=""):
-                    self.Pressure=requests.get(url=self.url+"/json.htm?type=devices&rid="+self.PressureIDX).json()['result'][0]["Barometer"]
+                    result=self.q2.get()
+                    if "Error" in str(result):
+                            Domoticz.Error(result)
+                            self.Altitude=1
+                            Domoticz.Log("Could not find altitude, using default of 1 meter.")
+                    else:
+                        self.Altitude=int(result)
+                        Domoticz.Log("Altitude is "+str(self.Altitude)+" meter.")
+                elif self.Station!="" and self.Altitude!="":
+                    for screen in self.Sunscreens:
+                        screen.CheckClose()
 
-                    SunLocation()
+                    if self.HeartbeatCount==0:
+                        #Only run once every 5 minutes(6 heartbeats)
+                        self.HeartbeatCount+=1
+                        if self.HeartbeatCount ==6:
+                            self.HeartbeatCount=0
 
-                    Cloudlayer()
-                    #Domoticz.Log("Current cloudlayer is "+str(self.Octa))
+                        self.Pressure=requests.get(url=self.url+"/json.htm?type=devices&rid="+self.PressureIDX).json()['result'][0]["Barometer"]
 
-                    VirtualLux()
+                        SunLocation()
 
-                    if self.JustSun==False:
-                        self.Temperature=requests.get(url=self.url+"/json.htm?type=devices&rid="+self.TemperatureIDX).json()['result'][0]["Temp"]
-                        Wind=requests.get(url=self.url+"/json.htm?type=devices&rid="+self.WindIDX).json()['result'][0]["Data"].split(";")
-                        self.Wind=Wind[2]
-                        self.Gust=Wind[3]
-                        self.Rain=requests.get(url=self.url+"/json.htm?type=devices&rid="+self.RainIDX).json()['result'][0]["Data"]
+                        Cloudlayer()
+                        #Domoticz.Log("Current cloudlayer is "+str(self.Octa))
+
+                        VirtualLux()
+
+                        if self.JustSun==False:
+                            self.Temperature=float(requests.get(url=self.url+"/json.htm?type=devices&rid="+self.TemperatureIDX).json()['result'][0]["Temp"])
+                            Wind=requests.get(url=self.url+"/json.htm?type=devices&rid="+self.WindIDX).json()['result'][0]["Data"].split(";")
+                            self.Wind=float(Wind[2])/10
+                            self.Gust=float(Wind[3])/10
+                            self.Rain=float(requests.get(url=self.url+"/json.htm?type=devices&rid="+self.RainIDX).json()['result'][0]["Data"])
             except Exception as e:
                 senderror(e)
         else:
             Domoticz.Error(self.Error)
 
     def CheckWeatherDevices(self):
-        if len(self.WeatherDevices)==1:
-            self.PressureDevice=self.WeatherDevices[0]
-            self.TemperatureDevice=""
-            self.WindDevice=""
-            self.RainDevice=""
-            self.JustSun=True
-            Domoticz.Status("Just found one weatherdevice, so no sunscreen device will be created.")
-        elif len(self.WeatherDevices)==4:
-            self.PressureDevice=self.WeatherDevices[0]
-            self.TemperatureDevice=self.WeatherDevices[1]
-            self.WindDevice=self.WeatherDevices[2]
-            self.RainDevice=self.WeatherDevices[3]
-        else:
-            self.Error="You should specify at least a pressure device, and optional a temperature, wind and rain device, but you defined "+str(len(devices))+" devices. Please update the hardware settings of this plugin."
-            Domoticz.Error(self.Error)
-
-        if self.Error==False:
-            AllDevices = requests.get(url=self.url+"/json.htm?type=devices&used=true").json()['result']
-            for device in AllDevices:
-                if device["Name"]==self.TemperatureDevice:
-                    self.TemperatureIDX=device["idx"]
-                    self.Temperature=device["Temp"] 
-                    Domoticz.Log("Found temperature device '"+self.TemperatureDevice+ "' Current temperature: "+str(self.Temperature))
-                if device["Name"]==self.WindDevice:
-                    self.WindIDX=device["idx"]
-                    self.Wind=device["Data"].split(";")[2]
-                    self.Gust=device["Data"].split(";")[3]
-                    Domoticz.Log("Found wind device '"+self.WindDevice+"' current wind: "+str(self.Wind)+". Current wind gust: " +str(self.Gust))
-                if device["Name"]==self.RainDevice:
-                    self.RainIDX=device["idx"]
-                    self.Rain=device["Data"]
-                    Domoticz.Log("Found rain device '"+self.RainDevice+"' current expected rain: "+str(self.Rain))
-                if device["Name"]==self.PressureDevice:
-                    self.PressureIDX=device["idx"]
-                    self.Pressure=device["Barometer"]
-                    Domoticz.Log("Found pressure device '"+self.PressureDevice+"' current pressure: "+str(self.Pressure))
-            try:
-                self.PressureIDX
-                if self.JustSun==False:
-                    self.TemperatureIDX
-                    self.WindIDX
-                    self.RainIDX
-            except AttributeError as Error:
-                device=str(Error).split("'")[3].replace("IDX","")
-                self.Error="Could not find "+getattr(self, device+"Device",device)+" device, please make sure it exists."
+        try:
+            if len(self.WeatherDevices)==1:
+                self.PressureDevice=self.WeatherDevices[0]
+                self.TemperatureDevice=""
+                self.WindDevice=""
+                self.RainDevice=""
+                self.JustSun=True
+                Domoticz.Status("Just found one weatherdevice, so no sunscreen device will be created.")
+            elif len(self.WeatherDevices)==4:
+                self.PressureDevice=self.WeatherDevices[0]
+                self.TemperatureDevice=self.WeatherDevices[1]
+                self.WindDevice=self.WeatherDevices[2]
+                self.RainDevice=self.WeatherDevices[3]
+            else:
+                self.Error="You should specify at least a pressure device, and optional a temperature, wind and rain device, but you defined "+str(len(devices))+" devices. Please update the hardware settings of this plugin."
                 Domoticz.Error(self.Error)
+
+            if self.Error==False:
+                AllDevices = requests.get(url=self.url+"/json.htm?type=devices&used=true").json()['result']
+                for device in AllDevices:
+                    if device["Name"]==self.TemperatureDevice:
+                        self.TemperatureIDX=device["idx"]
+                        self.Temperature=float(device["Temp"])
+                        Domoticz.Log("Found temperature device '"+str(self.TemperatureDevice)+ "' Current temperature: "+str(self.Temperature)+" °C.")
+                    if device["Name"]==self.WindDevice:
+                        self.WindIDX=device["idx"]
+                        self.Wind=int(device["Data"].split(";")[2])/10
+                        self.Gust=int(device["Data"].split(";")[3])/10
+                        Domoticz.Log("Found wind device '"+str(self.WindDevice)+"' current wind: "+str(self.Wind)+" m/s. Current wind gust: " +str(self.Gust)+" m/s.")
+                    if device["Name"]==self.RainDevice:
+                        self.RainIDX=device["idx"]
+                        self.Rain=int(device["Data"])
+                        Domoticz.Log("Found rain device '"+str(self.RainDevice)+"' current expected rain: "+str(self.Rain)+"mm.")
+                    if device["Name"]==self.PressureDevice:
+                        self.PressureIDX=device["idx"]
+                        self.Pressure=float(device["Barometer"])
+                        Domoticz.Log("Found pressure device '"+str(self.PressureDevice)+"' current pressure: "+str(self.Pressure)+" hPa.")
+                try:
+                    self.PressureIDX
+                    if self.JustSun==False:
+                        self.TemperatureIDX
+                        self.WindIDX
+                        self.RainIDX
+                except AttributeError as Error:
+                    device=str(Error).split("'")[3].replace("IDX","")
+                    self.Error="Could not find "+getattr(self, device+"Device",device)+" device, please make sure it exists."
+                    Domoticz.Error(self.Error)
+        except Exception as e:
+            senderror(e)
 
     def FindStation(self,q):
         try:
@@ -238,6 +345,10 @@ class BasePlugin:
             #Domoticz.Log("Location url is "+url)
             country=requests.get(url).json()["address"]["country"]
             q.put("Checking all Ogimet stations in "+country+" to find the one closest to your location.")
+        except Exception as e:
+            q.put("Url used to find your country is"+url)
+            q.put('Error on line {}'.format(sys.exc_info()[-1].tb_lineno)+" Error is: " +str(e))
+        try:
             #Find Ogimet station
             url="http://www.ogimet.com/display_stations.php?lang=en&tipo=AND&isyn=&oaci=&nombre=&estado="+country+"&Send=Send"
             #q.put("url is "+url)
@@ -246,7 +357,7 @@ class BasePlugin:
             df_list = pandas.read_html(html)
             mindist=1000
 
-            q.put("Calculating which station is the closest")
+            q.put("Calculating which station is the closest.")
             station="No station found."
             latdegree= int(str(self.Latitude).split(".")[0])
             if latdegree < 0:
@@ -278,13 +389,11 @@ class BasePlugin:
                             mindist=dist
                             station=df_list[1][0][i]
                             stationname=df_list[1][2][i]
-            q.put("Found station "+stationname+" with id:"+station+" on "+str(round(mindist,1))+"km of your location.",True)
+            q.put("Found station '"+stationname+"' with id:"+station+" on "+str(round(mindist,1))+"km of your location.",True)
         except Exception as e:
             q.put('Error on line {}'.format(sys.exc_info()[-1].tb_lineno)+" Error is: " +str(e))
 
 global _plugin
-global q1
-global q2
 _plugin = BasePlugin()
 
 def onStart():
@@ -332,11 +441,11 @@ def SunLocation():
         UpdateDevice(2, int(round(_plugin.sunAltitude)), int(round(_plugin.sunAltitude)))
         
         #azimut of the Sun
-        azimuth = math.acos((math.sin(math.radians(_plugin.Declinaison)) - math.sin(math.radians(_plugin.Latitude)) * math.sin(math.radians(_plugin.sunAltitude))) / (math.cos(math.radians(_plugin.Latitude)) * math.cos(math.radians(_plugin.sunAltitude) ))) * 180 / math.pi 
+        _plugin.azimuth = math.acos((math.sin(math.radians(_plugin.Declinaison)) - math.sin(math.radians(_plugin.Latitude)) * math.sin(math.radians(_plugin.sunAltitude))) / (math.cos(math.radians(_plugin.Latitude)) * math.cos(math.radians(_plugin.sunAltitude) ))) * 180 / math.pi 
         sinAzimuth = (math.cos(math.radians(_plugin.Declinaison)) * math.sin(math.radians(hourlyAngle))) / math.cos(math.radians(_plugin.sunAltitude))
         if(sinAzimuth<0):
-            azimuth=360-azimuth 
-        UpdateDevice(1,int(round(azimuth)),int(round(azimuth)))
+            _plugin.azimuth=360-_plugin.azimuth 
+        UpdateDevice(1,int(round(_plugin.azimuth)),int(round(_plugin.azimuth)))
 
 def Cloudlayer():
     global _plugin
@@ -353,14 +462,16 @@ def Cloudlayer():
             UTCtime=str(UTC.year)+str(UTC.month)+str(UTC.day)+hour+"00"
             url="http://www.ogimet.com/cgi-bin/getsynop?block="+_plugin.Station+"&begin="+UTCtime
             result=urlopen(url).read().decode('utf-8')
+            if "Status:" in result:
+                result=""
 
         Octa=int(result.split(" "+_plugin.Station+" ")[1].split(" ")[0][0])
         if Octa != _plugin.Octa:
             _plugin.Octa=Octa
-            Domoticz.Log("Updated cloudlayer to "+_plugin.Octa)
+            Domoticz.Log("Updated cloudlayer to "+str(_plugin.Octa))
     except Exception as e:
         Domoticz.Log("Cloudlayer url is "+url)
-        Domoticz.Log(str(result)+str(result==""))
+        Domoticz.Log(str(result))
         senderror(e)
 
 def VirtualLux():
@@ -378,22 +489,22 @@ def VirtualLux():
                 scatteredRadiation = RadiationAtm * (0.271 - 0.294 * math.pow(0.6,M)) * sinusSunAltitude
                 totalRadiation = scatteredRadiation + directRadiation
                 Lux = totalRadiation / 0.0079  # Radiation in Lux. 1 Lux = 0,0079 W/m²
-                weightedLux = Lux * Kc   # radiation of the Sun with the cloud layer
+                _plugin.weightedLux = Lux * Kc   # radiation of the Sun with the cloud layer
             elif _plugin.sunAltitude <= 1 and _plugin.sunAltitude >= -7: #apply theoretical Lux of twilight
                 directRadiation = 0
                 scatteredRadiation = 0
                 _plugin.ArbitraryTwilightLux=_plugin.ArbitraryTwilightLux-(1-_plugin.sunAltitude)/8*_plugin.ArbitraryTwilightLux
                 totalRadiation = scatteredRadiation + directRadiation + _plugin.ArbitraryTwilightLux 
                 Lux = totalRadiation / 0.0079 # Radiation in Lux. 1 Lux = 0,0079 W/m²
-                weightedLux = Lux * Kc   #radiation of the Sun with the cloud layer
+                _plugin.weightedLux = Lux * Kc   #radiation of the Sun with the cloud layer
             elif _plugin.sunAltitude < -7:  # no management of nautical and astronomical twilight...
                 directRadiation = 0
                 scatteredRadiation = 0
                 totalRadiation = 0
                 Lux = 0
-                weightedLux = 0  #  should be around 3,2 Lux for the nautic twilight. Nevertheless.
+                _plugin.weightedLux = 0  #  should be around 3,2 Lux for the nautic twilight. Nevertheless.
             
-            UpdateDevice(3,int(round(weightedLux)),int(round(weightedLux)))
+            UpdateDevice(3,int(round(_plugin.weightedLux)),int(round(_plugin.weightedLux)))
             #Domoticz.Log("Virtual LUX is "+str(round(weightedLux)))
         except Exception as e:
             senderror(e)
@@ -404,7 +515,6 @@ def VirtualLux():
 #
 
 def haversine(lat1, lon1, lat2, lon2):
-
     # Convert decimal degrees to radians
     lat1, lon1, lat2, lon2 = map(math.radians, [ lat1, lon1, lat2, lon2 ])
 
@@ -428,7 +538,10 @@ def Altitude(q):
         Altitude=response["results"][0]['elevation']
         q.put(Altitude)
     except Exception as e:
-        q.put('Error on line {}'.format(sys.exc_info()[-1].tb_lineno)+" Error is: " +str(e))
+        if "Expecting value" in str(e):
+            q.put(1)
+        else:
+            q.put('Error on line {}'.format(sys.exc_info()[-1].tb_lineno)+" Error is: " +str(e))
 
 def createDevices():
     global _plugin
@@ -453,10 +566,12 @@ def createDevices():
             Domoticz.Log("Checking sunscreen devices")
             for i in range(_plugin.NumberOfSunscreens):
                 x=i+4
+                Domoticz.Log("Current values are"+str(Devices[x]))
                 if x not in Devices:
                     Domoticz.Log("Created 'Sunscreen"+str(i)+"' device")
                     Domoticz.Device(Name="Sunscreen"+str(i), Unit=x, TypeName="Switch", Switchtype=13, Used=1).Create()
                     UpdateImage(x, 'ChromecastLogo')
+                _plugin.Sunscreens.append(Sunscreen(x,_plugin.Thresholds["azimuth"+str(i)],_plugin.Thresholds["alltitude"+str(i)]))
     except Exception as e:
         senderror(e)
 
