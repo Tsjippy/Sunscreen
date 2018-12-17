@@ -356,7 +356,10 @@ def Cloudlayer():
             url="http://www.ogimet.com/cgi-bin/getsynop?block="+_plugin.Station+"&begin="+UTCtime
             result=urlopen(url).read().decode('utf-8')
 
-        _plugin.Octa=int(result.split(" "+_plugin.Station+" ")[1].split(" ")[0][0])
+        Octa=int(result.split(" "+_plugin.Station+" ")[1].split(" ")[0][0])
+        if Octa != _plugin.Octa:
+            _plugin.Octa=Octa
+            Domoticz.Log("Updated cloudlayer to "+_plugin.Octa)
     except Exception as e:
         Domoticz.Log("Cloudlayer url is "+url)
         Domoticz.Log(str(result)+str(result==""))
