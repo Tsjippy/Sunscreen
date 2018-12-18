@@ -2,7 +2,7 @@
 # Author: Tsjippy
 #
 """
-<plugin key="SunScreen" name="Sunscreen plugin" author="Tsjippy" version="1.0.3" wikilink="http://www.domoticz.com/wiki/plugins/plugin.html" externallink="https://wiki.domoticz.com/wiki/Real-time_solar_data_without_any_hardware_sensor_:_azimuth,_Altitude,_Lux_sensor...">
+<plugin key="SunScreen" name="Sunscreen plugin" author="Tsjippy" version="1.1.3" wikilink="http://www.domoticz.com/wiki/plugins/plugin.html" externallink="https://wiki.domoticz.com/wiki/Real-time_solar_data_without_any_hardware_sensor_:_azimuth,_Altitude,_Lux_sensor...">
     <description>
         <h2>Sunscreen plugin</h2><br/>
         This plugin calculates the virtual amount of LUX on your current location<br/>
@@ -49,7 +49,6 @@ from urllib.request import urlopen
 #sudo pip3 install lxml -t /home/pi/domoticz/plugins/Sunscreen
 #sudo pip3 install pandas -t /home/pi/domoticz/plugins/Sunscreen
 #sudo apt-get install libatlas-base-dev
-import pandas
 from multiprocessing import Process, Queue
 import time
 
@@ -76,7 +75,7 @@ class Sunscreen:
 
                 if ShouldOpen == True:
                     UpdateDevice(self.DeviceID, 0, "Off")
-                elif _plugin.HeartbeatCount==0:
+                else:
                     self.CheckOpen()
         except Exception as e:
             senderror(e)
@@ -353,6 +352,7 @@ class BasePlugin:
 
     def FindStation(self,q):
         try:
+            import pandas
             #Find Country
             url="https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat="+str(self.Latitude)+"&lon="+str(self.Longitude)+"&accept-language=en-US"
             if self.Debug==True:
