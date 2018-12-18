@@ -2,7 +2,7 @@
 # Author: Tsjippy
 #
 """
-<plugin key="SunScreen" name="Sunscreen plugin" author="Tsjippy" version="1.1.0" wikilink="http://www.domoticz.com/wiki/plugins/plugin.html" externallink="https://wiki.domoticz.com/wiki/Real-time_solar_data_without_any_hardware_sensor_:_azimuth,_Altitude,_Lux_sensor...">
+<plugin key="SunScreen" name="Sunscreen plugin" author="Tsjippy" version="1.1.1" wikilink="http://www.domoticz.com/wiki/plugins/plugin.html" externallink="https://wiki.domoticz.com/wiki/Real-time_solar_data_without_any_hardware_sensor_:_azimuth,_Altitude,_Lux_sensor...">
     <description>
         <h2>Sunscreen plugin</h2><br/>
         This plugin calculates the virtual amount of LUX on your current location<br/>
@@ -28,6 +28,12 @@
         <param field="Mode3" label="Weather thresholds" width="1000px" default=""/>
         <param field="Mode4" label="Wheater devices" width="1000px" required="true" default="Pressure;Temp;Wind;Rain"/>
         <param field="Mode5" label="Domoticz url and port" width="200px" required="true" default="http://127.0.0.1:8080"/>
+        <param field="Mode6" label="Debug" width="100px">
+            <options>
+                <option label="True" value="True" />
+                <option label="False" value="False" default="False"/>
+            </options>
+        </param>
     </params>
 </plugin>
 """
@@ -147,6 +153,10 @@ class BasePlugin:
         self.HeartbeatCount=0
         self.Sunscreens=[]
         self.weightedLux=0
+        if Parameters["Mode6"]=="True":
+            self.Debug=True
+        else:
+            self.Debug=False
         #Domoticz.Trace(True)
 
         try:
@@ -263,7 +273,8 @@ class BasePlugin:
                         SunLocation()
 
                         Cloudlayer()
-                        #Domoticz.Log("Current cloudlayer is "+str(self.Octa))
+                        if self.Debug==True:
+                            Domoticz.Log("Current cloudlayer is "+str(self.Octa))
 
                         VirtualLux()
 
@@ -297,7 +308,12 @@ class BasePlugin:
                 Domoticz.Error(self.Error)
 
             if self.Error==False:
-                AllDevices = requests.get(url=self.url+"/json.htm?type=devices&used=true").json()['result']
+                try:
+                    AllDevices = requests.get(url=self.url+"/json.htm?type=devices&used=true").json()['result']
+                except Exception as e:
+                    Domoticz.Error("Could not get all devces with url: "+self.url+"/json.htm?type=devices&used=true")
+                    senderror(e)
+
                 for device in AllDevices:
                     if device["Name"]==self.TemperatureDevice:
                         self.TemperatureIDX=device["idx"]
@@ -333,7 +349,8 @@ class BasePlugin:
         try:
             #Find Country
             url="https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat="+str(self.Latitude)+"&lon="+str(self.Longitude)+"&accept-language=en-US"
-            #Domoticz.Log("Location url is "+url)
+            if self.Debug==True:
+                Domoticz.Log("Location url is "+url)
             country=requests.get(url).json()["address"]["country"]
             q.put("Checking all Ogimet stations in "+country+" to find the one closest to your location.")
         except Exception as e:
@@ -342,7 +359,8 @@ class BasePlugin:
         try:
             #Find Ogimet station
             url="http://www.ogimet.com/display_stations.php?lang=en&tipo=AND&isyn=&oaci=&nombre=&estado="+country+"&Send=Send"
-            #q.put("url is "+url)
+            if self.Debug==True:
+                q.put("Url to find all Ogimet stations is "+url)
             #Parse the table
             html = requests.get(url).content
             df_list = pandas.read_html(html)
@@ -452,6 +470,9 @@ def Cloudlayer():
                 hour=str(int(hour)-1)
             UTCtime=str(UTC.year)+str(UTC.month)+str(UTC.day)+hour+"00"
             url="http://www.ogimet.com/cgi-bin/getsynop?block="+_plugin.Station+"&begin="+UTCtime
+
+            if _plugin.Debug==True:
+                Domoticz.Log("Ogimet url is: "+url)
             result=urlopen(url).read().decode('utf-8')
             if "Status:" in result:
                 result=""
@@ -575,8 +596,12 @@ def UpdateImage(Unit, Logo):
 
 # Update Device into database
 def UpdateDevice(Unit, nValue, sValue, AlwaysUpdate=False):
+    global _plugin
     # Make sure that the Domoticz device still exists (they can be deleted) before updating it
     if Unit in Devices:
         if Devices[Unit].nValue != nValue or Devices[Unit].sValue != str(sValue) or AlwaysUpdate == True:
             Devices[Unit].Update(nValue, str(sValue))
+            if _plugin.Debug==True:
+                Domoticz.Log("Update " + Devices[Unit].Name + ": " + str(nValue) + " - '" + str(sValue) + "'")
+
     return
