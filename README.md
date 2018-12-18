@@ -38,5 +38,5 @@ Known bugs
 Releases
 ----------
 2018-12-13: Initial release (1.0.0) <br/>
-2018-12-17: Now supports multiple sunscreens, and searches for the best Ogimet station automatically. Also retrieves the altitude automatically.
-2018-12-18 (1.1.3): Fixes a problem resulting not being able to update the hardware, added a sunscreen override button.
+2018-12-17: Now supports multiple sunscreens, and searches for the best Ogimet station automatically. Also retrieves the altitude automatically.<br/>
+2018-12-18 (1.1.3): Fixes a problem resulting not being able to update the hardware, added a sunscreen override button.<br/>
