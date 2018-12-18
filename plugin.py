@@ -2,7 +2,7 @@
 # Author: Tsjippy
 #
 """
-<plugin key="SunScreen" name="Sunscreen plugin" author="Tsjippy" version="1.1.3" wikilink="http://www.domoticz.com/wiki/plugins/plugin.html" externallink="https://wiki.domoticz.com/wiki/Real-time_solar_data_without_any_hardware_sensor_:_azimuth,_Altitude,_Lux_sensor...">
+<plugin key="SunScreen" name="Sunscreen plugin" author="Tsjippy" version="1.2.0" wikilink="http://www.domoticz.com/wiki/plugins/plugin.html" externallink="https://wiki.domoticz.com/wiki/Real-time_solar_data_without_any_hardware_sensor_:_azimuth,_Altitude,_Lux_sensor...">
     <description>
         <h2>Sunscreen plugin</h2><br/>
         This plugin calculates the virtual amount of LUX on your current location<br/>
@@ -31,7 +31,7 @@
         <param field="Mode6" label="Debug" width="100px">
             <options>
                 <option label="True" value="True" />
-                <option label="False" value="False" default="False"/>
+                <option label="False" value="False" default="True"/>
             </options>
         </param>
     </params>
@@ -284,7 +284,7 @@ class BasePlugin:
 
                     VirtualLux()
 
-                    if self.JustSun==False:
+                    if self.JustSun==False and Devices[4].sValue=="Off":
                         self.Temperature=float(requests.get(url=self.url+"/json.htm?type=devices&rid="+self.TemperatureIDX).json()['result'][0]["Temp"])
                         Wind=requests.get(url=self.url+"/json.htm?type=devices&rid="+self.WindIDX).json()['result'][0]["Data"].split(";")
                         self.Wind=float(Wind[2])/10
@@ -293,6 +293,8 @@ class BasePlugin:
 
                         for screen in self.Sunscreens:
                             screen.CheckClose()
+                    elif Devices[4].sValue=="On" and self.Debug==True:
+                        Domoticz.Status("Not performing sunscreen actions as the override button is on.")
 
             except Exception as e:
                 senderror(e)
@@ -595,10 +597,14 @@ def createDevices():
             Domoticz.Log("Created 'Virtual Lux'")
             Domoticz.Device(Name="Virtual Lux", Unit=3, Type=246, Subtype=1, Used=1).Create()
 
+        if 4 not in Devices:
+            Domoticz.Log("Created 'Override button")
+            Domoticz.Device(Name="Override button", Unit=4, TypeName="Switch", Used=1).Create()
+
         if _plugin.JustSun==False:
             Domoticz.Log("Checking sunscreen devices")
             for i in range(_plugin.NumberOfSunscreens):
-                x=i+4
+                x=i+5
                 if x not in Devices:
                     Domoticz.Log("Created 'Sunscreen"+str(i)+"' device")
                     Domoticz.Device(Name="Sunscreen"+str(i), Unit=x, TypeName="Switch", Switchtype=13, Used=1).Create()
