@@ -190,18 +190,27 @@ class BasePlugin:
                     self.JustSun=True
                     Domoticz.Status("No sun thresholds are given, so no sunscreen device will be created.")
                 else:
-                    self.NumberOfSunscreens=int(len(SunThresholds)/5)
-                    for i in range(self.NumberOfSunscreens):
-                        self.Thresholds["azimuth"+str(i)]=[SunThresholds[i],SunThresholds[i+1]]
-                        self.Thresholds["alltitude"+str(i)]=[SunThresholds[i+2],SunThresholds[i+3],SunThresholds[i+4]]
+                    self.NumberOfSunscreens=len(SunThresholds)/5
+                    if self.NumberOfSunscreens.is_integer()==True:
+                        self.NumberOfSunscreens=int(self.NumberOfSunscreens)
+                        for i in range(self.NumberOfSunscreens):
+                            self.Thresholds["azimuth"+str(i)]=[SunThresholds[i],SunThresholds[i+1]]
+                            self.Thresholds["alltitude"+str(i)]=[SunThresholds[i+2],SunThresholds[i+3],SunThresholds[i+4]]
+                    else:
+                        self.JustSun=True
+                        Domoticz.Error("You specified "+str(len(SunThresholds))+" sun thresholds, you should specify 5 or a multitude of 5. No sunscreen device will be created, until you update the hardware.")
 
                 if WeatherThresholds!=[""] and self.JustSun==False:
-                    self.Thresholds["lux"]=[int(WeatherThresholds[0]),int(WeatherThresholds[1])]
-                    self.Thresholds["temp"]=[int(WeatherThresholds[2]),int(WeatherThresholds[3])]
-                    self.Thresholds["wind"]=int(WeatherThresholds[4])
-                    self.Thresholds["gust"]=int(WeatherThresholds[5])
-                    self.Thresholds["rain"]=int(WeatherThresholds[6])
-                elif (WeatherThresholds==[""]):
+                    if len(WeatherThresholds) == 7:
+                        self.Thresholds["lux"]=[int(WeatherThresholds[0]),int(WeatherThresholds[1])]
+                        self.Thresholds["temp"]=[int(WeatherThresholds[2]),int(WeatherThresholds[3])]
+                        self.Thresholds["wind"]=int(WeatherThresholds[4])
+                        self.Thresholds["gust"]=int(WeatherThresholds[5])
+                        self.Thresholds["rain"]=int(WeatherThresholds[6])
+                    else:
+                        self.JustSun=True
+                        Domoticz.Error("You specified "+str(len(WeatherThresholds))+" thresholds, you should specify 7. No sunscreen device will be created, until you update the hardware.")
+                elif WeatherThresholds==[""] and self.JustSun==False:
                     self.JustSun=True
                     Domoticz.Status("No weather thresholds are given, so no sunscreen device will be created.")     
 
@@ -211,10 +220,9 @@ class BasePlugin:
                         Domoticz.Log("Will only close sunscreen"+str(i)+" if the azimuth is between "+str(self.Thresholds["azimuth"+str(i)][0])+" and "+str(self.Thresholds["azimuth"+str(i)][1])+" degrees, the altitude is between "+str(self.Thresholds["alltitude"+str(i)][0])+" and "+str(self.Thresholds["alltitude"+str(i)][2])+" degrees, the temperature is above "+str(self.Thresholds["temp"][1])+" degrees and the amount of lux is between "+str(self.Thresholds["lux"][0])+" and "+str(self.Thresholds["lux"][1])+" lux")
                     Domoticz.Log("Will open a sunscreen if it is raining, the temperature drops below "+str(self.Thresholds["temp"][0])+" °C, the wind is more than "+str(self.Thresholds["wind"])+" m/s or the gust are more than "+str(self.Thresholds["gust"])+" m/s")
 
-                    self.CheckWeatherDevices()
+                self.CheckWeatherDevices()
 
-                    createDevices()
-                    #self.Station=FindStation()
+                createDevices()
         except Exception as e:
             self.Error="Something went wrong during boot. Please chack the logs."
             senderror(e)
@@ -301,8 +309,9 @@ class BasePlugin:
                 self.TemperatureDevice=""
                 self.WindDevice=""
                 self.RainDevice=""
-                self.JustSun=True
-                Domoticz.Status("Just found one weatherdevice, so no sunscreen device will be created.")
+                if self.JustSun==False:
+                    self.JustSun=True
+                    Domoticz.Status("Just found one weatherdevice, so no sunscreen device will be created.")
             elif len(self.WeatherDevices)==4:
                 self.PressureDevice=self.WeatherDevices[0]
                 self.TemperatureDevice=self.WeatherDevices[1]
