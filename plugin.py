@@ -2,7 +2,7 @@
 # Author: Tsjippy
 #
 """
-<plugin key="SunScreen" name="Sunscreen plugin" author="Tsjippy" version="1.1.1" wikilink="http://www.domoticz.com/wiki/plugins/plugin.html" externallink="https://wiki.domoticz.com/wiki/Real-time_solar_data_without_any_hardware_sensor_:_azimuth,_Altitude,_Lux_sensor...">
+<plugin key="SunScreen" name="Sunscreen plugin" author="Tsjippy" version="1.0.3" wikilink="http://www.domoticz.com/wiki/plugins/plugin.html" externallink="https://wiki.domoticz.com/wiki/Real-time_solar_data_without_any_hardware_sensor_:_azimuth,_Altitude,_Lux_sensor...">
     <description>
         <h2>Sunscreen plugin</h2><br/>
         This plugin calculates the virtual amount of LUX on your current location<br/>
@@ -65,13 +65,13 @@ class Sunscreen:
             # If screen is down, check if it needs to go up due to the wheater
             if Devices[self.DeviceID].sValue!="Off":
                 if _plugin.Wind > _plugin.Thresholds["wind"] or _plugin.Gust > _plugin.Thresholds["gust"]:
-                    Domoticz.Status("Opening "+Devices[self.DeviceID].Name+" because of the wind. ("+str(_plugin.Wind)+" m/s).")
+                    Domoticz.Status("Opening '"+Devices[self.DeviceID].Name+"' because of the wind. ("+str(_plugin.Wind)+" m/s).")
                     ShouldOpen = True
                 elif _plugin.Rain > _plugin.Thresholds["rain"]:
-                    Domoticz.Status("Opening "+Devices[self.DeviceID].Name+" because of the rain.("+str(_plugin.Rain)+" mm).")
+                    Domoticz.Status("Opening '"+Devices[self.DeviceID].Name+"' because of the rain.("+str(_plugin.Rain)+" mm).")
                     ShouldOpen = True
                 elif _plugin.weightedLux < _plugin.Thresholds["lux"][0]:
-                    Domoticz.Status("Opening "+Devices[self.DeviceID].Name+" because of the light intensity. ("+str(round(_plugin.weightedLux))+" lux).")
+                    Domoticz.Status("Opening '"+Devices[self.DeviceID].Name+"' because of the light intensity. ("+str(round(_plugin.weightedLux))+" lux).")
                     ShouldOpen = True
 
                 if ShouldOpen == True:
@@ -100,28 +100,28 @@ class Sunscreen:
                                 if _plugin.weightedLux > _plugin.Thresholds["lux"][1] or _plugin.Temperature > _plugin.Thresholds["temp"][1]:
                                     #--------------------   Close sunscreen   -------------------- 
                                     if _plugin.sunAltitude > self.AltitudeThresholds[1] and Devices[self.DeviceID].sValue != 50:
-                                        Domoticz.Log ("Half closing "+Devices[self.DeviceID].Name+".")
+                                        Domoticz.Log ("Half closing '"+Devices[self.DeviceID].Name+"'.")
                                         UpdateDevice(self.DeviceID, 50, "50")
                                         #self.LastUpdateTime=datetime.datetime.now().replace(second=0, microsecond=0)
                                     elif (Devices[self.DeviceID].sValue == "Off") and _plugin.sunAltitude < self.AltitudeThresholds[1]:
-                                        Domoticz.Log ("Full closing "+Devices[self.DeviceID].Name+".")
+                                        Domoticz.Log ("Full closing '"+Devices[self.DeviceID].Name+"'.")
                                         UpdateDevice(self.DeviceID, 100, "On")
                                         #self.LastUpdateTime=datetime.datetime.now().replace(second=0, microsecond=0)
                                     else:
-                                        Domoticz.Log(Devices[self.DeviceID].Name+" is already down.")
+                                        Domoticz.Log("'"+Devices[self.DeviceID].Name+"' is already down.")
                                 else:
-                                    Domoticz.Log("Not closing "+Devices[self.DeviceID].Name+" because of the amount of LUX.")
+                                    Domoticz.Log("Not closing '"+Devices[self.DeviceID].Name+"' because of the amount of LUX.")
                             else:
-                                Domoticz.Log("Not closing "+Devices[self.DeviceID].Name+" because of the rain.")
+                                Domoticz.Log("Not closing '"+Devices[self.DeviceID].Name+"' because of the rain.")
                         else:
-                            Domoticz.Log("Not closing "+Devices[self.DeviceID].Name+" because of the windgusts.")
+                            Domoticz.Log("Not closing '"+Devices[self.DeviceID].Name+"' because of the windgusts.")
                     else:
-                        Domoticz.Log("Not closing "+Devices[self.DeviceID].Name+" because of the windspeed.")
+                        Domoticz.Log("Not closing '"+Devices[self.DeviceID].Name+"' because of the windspeed.")
                 #Sun is not in the region
                 elif Devices[self.DeviceID].sValue!="Off":
-                    Domoticz.Log("Opening "+Devices[self.DeviceID].Name+", as it is no longer needed.")
+                    Domoticz.Log("Opening '"+Devices[self.DeviceID].Name+"', as it is no longer needed.")
                 else:
-                    Domoticz.Log("No need to close the "+Devices[self.DeviceID].Name+".")
+                    Domoticz.Log("No need to close the '"+Devices[self.DeviceID].Name+"'.")
             else:
                 Domoticz.Log("Last change was less than "+_plugin.switchtime+" minutes ago, no action will be performed.")
         except Exception as e:
@@ -150,7 +150,7 @@ class BasePlugin:
         self.Station=""
         self.Altitude=""
         self.Octa=""
-        self.HeartbeatCount=0
+        self.HeartbeatCount=-1
         self.Sunscreens=[]
         self.weightedLux=0
         if Parameters["Mode6"]=="True":
@@ -223,6 +223,14 @@ class BasePlugin:
     def onStop(self):
         Domoticz.Log("onStop called")
 
+        try:
+            self.p1.terminate()
+            self.p2.terminate()
+        except Exception as e:
+            senderror(e)
+
+        Domoticz.Log("Terminated running processes")
+
     def onCommand(self, Unit, Command, Level, Hue):
         #Domoticz.Log("onCommand called for Unit " + str(Unit) + ": Parameter '" + str(Command) + "', Level: " + str(Level))
         if str(Command)=='Set Level':
@@ -259,37 +267,35 @@ class BasePlugin:
                         self.Altitude=int(result)
                         Domoticz.Log("Altitude is "+str(self.Altitude)+" meter.")
                 elif self.Station!="" and self.Altitude!="":
-                    for screen in self.Sunscreens:
-                        screen.CheckClose()
+                    self.Pressure=requests.get(url=self.url+"/json.htm?type=devices&rid="+self.PressureIDX).json()['result'][0]["Barometer"]
 
-                    if self.HeartbeatCount==0:
-                        #Only run once every 5 minutes(6 heartbeats)
-                        self.HeartbeatCount+=1
-                        if self.HeartbeatCount ==6:
-                            self.HeartbeatCount=0
+                    SunLocation()
 
-                        self.Pressure=requests.get(url=self.url+"/json.htm?type=devices&rid="+self.PressureIDX).json()['result'][0]["Barometer"]
+                    Cloudlayer()
+                    if self.Debug==True:
+                        Domoticz.Log("Current cloudlayer is "+str(self.Octa))
 
-                        SunLocation()
+                    VirtualLux()
 
-                        Cloudlayer()
-                        if self.Debug==True:
-                            Domoticz.Log("Current cloudlayer is "+str(self.Octa))
+                    if self.JustSun==False:
+                        self.Temperature=float(requests.get(url=self.url+"/json.htm?type=devices&rid="+self.TemperatureIDX).json()['result'][0]["Temp"])
+                        Wind=requests.get(url=self.url+"/json.htm?type=devices&rid="+self.WindIDX).json()['result'][0]["Data"].split(";")
+                        self.Wind=float(Wind[2])/10
+                        self.Gust=float(Wind[3])/10
+                        self.Rain=float(requests.get(url=self.url+"/json.htm?type=devices&rid="+self.RainIDX).json()['result'][0]["Data"])
 
-                        VirtualLux()
+                        for screen in self.Sunscreens:
+                            screen.CheckClose()
 
-                        if self.JustSun==False:
-                            self.Temperature=float(requests.get(url=self.url+"/json.htm?type=devices&rid="+self.TemperatureIDX).json()['result'][0]["Temp"])
-                            Wind=requests.get(url=self.url+"/json.htm?type=devices&rid="+self.WindIDX).json()['result'][0]["Data"].split(";")
-                            self.Wind=float(Wind[2])/10
-                            self.Gust=float(Wind[3])/10
-                            self.Rain=float(requests.get(url=self.url+"/json.htm?type=devices&rid="+self.RainIDX).json()['result'][0]["Data"])
             except Exception as e:
                 senderror(e)
         else:
             Domoticz.Error(self.Error)
 
     def CheckWeatherDevices(self):
+        if self.Debug==True:
+            Domoticz.Log("Checking weather devices.")
+
         try:
             if len(self.WeatherDevices)==1:
                 self.PressureDevice=self.WeatherDevices[0]
@@ -327,7 +333,7 @@ class BasePlugin:
                     if device["Name"]==self.RainDevice:
                         self.RainIDX=device["idx"]
                         self.Rain=int(device["Data"])
-                        Domoticz.Log("Found rain device '"+str(self.RainDevice)+"' current expected rain: "+str(self.Rain)+"mm.")
+                        Domoticz.Log("Found rain device '"+str(self.RainDevice)+"' current expected rain: "+str(self.Rain)+" mm.")
                     if device["Name"]==self.PressureDevice:
                         self.PressureIDX=device["idx"]
                         self.Pressure=float(device["Barometer"])
@@ -441,23 +447,29 @@ def senderror(e):
     return
 
 def SunLocation():
-        global _plugin
-        #altitude of the Sun 
-        timeDecimal = (datetime.datetime.utcnow().hour + datetime.datetime.utcnow().minute / 60)
-        solarHour = timeDecimal + (4 * _plugin.Longitude / 60 )
-        hourlyAngle = 15 * ( 12 - solarHour )          
-        _plugin.sunAltitude = math.degrees(math.asin(math.sin(math.radians(_plugin.Latitude))* math.sin(math.radians(_plugin.Declinaison)) + math.cos(math.radians(_plugin.Latitude)) * math.cos(math.radians(_plugin.Declinaison)) * math.cos(math.radians(hourlyAngle))))
-        UpdateDevice(2, int(round(_plugin.sunAltitude)), int(round(_plugin.sunAltitude)))
-        
-        #azimut of the Sun
-        _plugin.azimuth = math.acos((math.sin(math.radians(_plugin.Declinaison)) - math.sin(math.radians(_plugin.Latitude)) * math.sin(math.radians(_plugin.sunAltitude))) / (math.cos(math.radians(_plugin.Latitude)) * math.cos(math.radians(_plugin.sunAltitude) ))) * 180 / math.pi 
-        sinAzimuth = (math.cos(math.radians(_plugin.Declinaison)) * math.sin(math.radians(hourlyAngle))) / math.cos(math.radians(_plugin.sunAltitude))
-        if(sinAzimuth<0):
-            _plugin.azimuth=360-_plugin.azimuth 
-        UpdateDevice(1,int(round(_plugin.azimuth)),int(round(_plugin.azimuth)))
+    global _plugin
+
+    if _plugin.Debug==True:
+        Domoticz.Log("Calculating sunlocation.")
+
+    #altitude of the Sun 
+    timeDecimal = (datetime.datetime.utcnow().hour + datetime.datetime.utcnow().minute / 60)
+    solarHour = timeDecimal + (4 * _plugin.Longitude / 60 )
+    hourlyAngle = 15 * ( 12 - solarHour )          
+    _plugin.sunAltitude = math.degrees(math.asin(math.sin(math.radians(_plugin.Latitude))* math.sin(math.radians(_plugin.Declinaison)) + math.cos(math.radians(_plugin.Latitude)) * math.cos(math.radians(_plugin.Declinaison)) * math.cos(math.radians(hourlyAngle))))
+    UpdateDevice(2, int(round(_plugin.sunAltitude)), int(round(_plugin.sunAltitude)))
+    
+    #azimut of the Sun
+    _plugin.azimuth = math.acos((math.sin(math.radians(_plugin.Declinaison)) - math.sin(math.radians(_plugin.Latitude)) * math.sin(math.radians(_plugin.sunAltitude))) / (math.cos(math.radians(_plugin.Latitude)) * math.cos(math.radians(_plugin.sunAltitude) ))) * 180 / math.pi 
+    sinAzimuth = (math.cos(math.radians(_plugin.Declinaison)) * math.sin(math.radians(hourlyAngle))) / math.cos(math.radians(_plugin.sunAltitude))
+    if(sinAzimuth<0):
+        _plugin.azimuth=360-_plugin.azimuth 
+    UpdateDevice(1,int(round(_plugin.azimuth)),int(round(_plugin.azimuth)))
 
 def Cloudlayer():
     global _plugin
+    if _plugin.Debug==True:
+        Domoticz.Log("Retrieving cloudlayer.")
     try:
         result=""
         UTC=datetime.datetime.utcnow()
@@ -473,11 +485,13 @@ def Cloudlayer():
 
             if _plugin.Debug==True:
                 Domoticz.Log("Ogimet url is: "+url)
+
             result=urlopen(url).read().decode('utf-8')
             if "Status:" in result:
                 result=""
 
-        Octa=int(result.split(" "+_plugin.Station+" ")[1].split(" ")[0][0])
+        result=result.split(" "+_plugin.Station+" ")
+        Octa=int(result[len(result)-1].split(" ")[0][0])
         if Octa != _plugin.Octa:
             _plugin.Octa=Octa
             Domoticz.Log("Updated cloudlayer to "+str(_plugin.Octa))
@@ -487,45 +501,46 @@ def Cloudlayer():
         senderror(e)
 
 def VirtualLux():
-        global _plugin
-        try:
-            RadiationAtm = _plugin.ConstantSolarRadiation * (1 +0.034 * math.cos( math.radians( 360 * _plugin.Yearday / _plugin.DaysInYear )))   
-            absolutePressure = _plugin.Pressure - round((_plugin.Altitude/ 8.3),1) # hPa
-            sinusSunAltitude = math.sin(math.radians(_plugin.sunAltitude))
-            M0 = math.sqrt(1229 + math.pow(614 * sinusSunAltitude,2)) - 614 * sinusSunAltitude
-            M = M0 * _plugin.Pressure/absolutePressure
-            
-            Kc=1-0.75*math.pow(_plugin.Octa/8,3.4)  # Factor of mitigation for the cloud layer
-            if _plugin.sunAltitude > 1: # Below 1° of Altitude , the formulae reach their limit of precision.
-                directRadiation = RadiationAtm * math.pow(0.6,M) * sinusSunAltitude
-                scatteredRadiation = RadiationAtm * (0.271 - 0.294 * math.pow(0.6,M)) * sinusSunAltitude
-                totalRadiation = scatteredRadiation + directRadiation
-                Lux = totalRadiation / 0.0079  # Radiation in Lux. 1 Lux = 0,0079 W/m²
-                _plugin.weightedLux = Lux * Kc   # radiation of the Sun with the cloud layer
-            elif _plugin.sunAltitude <= 1 and _plugin.sunAltitude >= -7: #apply theoretical Lux of twilight
-                directRadiation = 0
-                scatteredRadiation = 0
-                _plugin.ArbitraryTwilightLux=_plugin.ArbitraryTwilightLux-(1-_plugin.sunAltitude)/8*_plugin.ArbitraryTwilightLux
-                totalRadiation = scatteredRadiation + directRadiation + _plugin.ArbitraryTwilightLux 
-                Lux = totalRadiation / 0.0079 # Radiation in Lux. 1 Lux = 0,0079 W/m²
-                _plugin.weightedLux = Lux * Kc   #radiation of the Sun with the cloud layer
-            elif _plugin.sunAltitude < -7:  # no management of nautical and astronomical twilight...
-                directRadiation = 0
-                scatteredRadiation = 0
-                totalRadiation = 0
-                Lux = 0
-                _plugin.weightedLux = 0  #  should be around 3,2 Lux for the nautic twilight. Nevertheless.
-            
-            UpdateDevice(3,int(round(_plugin.weightedLux)),int(round(_plugin.weightedLux)))
-            #Domoticz.Log("Virtual LUX is "+str(round(weightedLux)))
-        except Exception as e:
-            senderror(e)
+    global _plugin
+    if _plugin.Debug==True:
+        Domoticz.Log("Calculating virtual lux.")
+
+    try:
+        RadiationAtm = _plugin.ConstantSolarRadiation * (1 +0.034 * math.cos( math.radians( 360 * _plugin.Yearday / _plugin.DaysInYear )))   
+        absolutePressure = _plugin.Pressure - round((_plugin.Altitude/ 8.3),1) # hPa
+        sinusSunAltitude = math.sin(math.radians(_plugin.sunAltitude))
+        M0 = math.sqrt(1229 + math.pow(614 * sinusSunAltitude,2)) - 614 * sinusSunAltitude
+        M = M0 * _plugin.Pressure/absolutePressure
+        
+        Kc=1-0.75*math.pow(_plugin.Octa/8,3.4)  # Factor of mitigation for the cloud layer
+        if _plugin.sunAltitude > 1: # Below 1° of Altitude , the formulae reach their limit of precision.
+            directRadiation = RadiationAtm * math.pow(0.6,M) * sinusSunAltitude
+            scatteredRadiation = RadiationAtm * (0.271 - 0.294 * math.pow(0.6,M)) * sinusSunAltitude
+            totalRadiation = scatteredRadiation + directRadiation
+            Lux = totalRadiation / 0.0079  # Radiation in Lux. 1 Lux = 0,0079 W/m²
+            _plugin.weightedLux = Lux * Kc   # radiation of the Sun with the cloud layer
+        elif _plugin.sunAltitude <= 1 and _plugin.sunAltitude >= -7: #apply theoretical Lux of twilight
+            directRadiation = 0
+            scatteredRadiation = 0
+            _plugin.ArbitraryTwilightLux=_plugin.ArbitraryTwilightLux-(1-_plugin.sunAltitude)/8*_plugin.ArbitraryTwilightLux
+            totalRadiation = scatteredRadiation + directRadiation + _plugin.ArbitraryTwilightLux 
+            Lux = totalRadiation / 0.0079 # Radiation in Lux. 1 Lux = 0,0079 W/m²
+            _plugin.weightedLux = Lux * Kc   #radiation of the Sun with the cloud layer
+        elif _plugin.sunAltitude < -7:  # no management of nautical and astronomical twilight...
+            directRadiation = 0
+            scatteredRadiation = 0
+            totalRadiation = 0
+            Lux = 0
+            _plugin.weightedLux = 0  #  should be around 3,2 Lux for the nautic twilight. Nevertheless.
+        
+        UpdateDevice(3,int(round(_plugin.weightedLux)),int(round(_plugin.weightedLux)))
+    except Exception as e:
+        senderror(e)
 
 #
 # Calculate the great circle distance between two points
 # on the earth (specified in decimal degrees)
 #
-
 def haversine(lat1, lon1, lat2, lon2):
     # Convert decimal degrees to radians
     lat1, lon1, lat2, lon2 = map(math.radians, [ lat1, lon1, lat2, lon2 ])
@@ -603,5 +618,4 @@ def UpdateDevice(Unit, nValue, sValue, AlwaysUpdate=False):
             Devices[Unit].Update(nValue, str(sValue))
             if _plugin.Debug==True:
                 Domoticz.Log("Update " + Devices[Unit].Name + ": " + str(nValue) + " - '" + str(sValue) + "'")
-
     return
