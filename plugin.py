@@ -2,7 +2,7 @@
 # Author: Tsjippy
 #
 """
-<plugin key="SunScreen" name="Sunscreen plugin" author="Tsjippy" version="1.3.0" wikilink="http://www.domoticz.com/wiki/plugins/plugin.html" externallink="https://wiki.domoticz.com/wiki/Real-time_solar_data_without_any_hardware_sensor_:_azimuth,_Altitude,_Lux_sensor...">
+<plugin key="SunScreen" name="Sunscreen plugin" author="Tsjippy" version="1.3.1" wikilink="http://www.domoticz.com/wiki/plugins/plugin.html" externallink="https://wiki.domoticz.com/wiki/Real-time_solar_data_without_any_hardware_sensor_:_azimuth,_Altitude,_Lux_sensor...">
     <description>
         <h2>Sunscreen plugin</h2><br/>
         This plugin calculates the virtual amount of LUX on your current location<br/>
@@ -38,17 +38,18 @@
 </plugin>
 """
 
+#sudo pip3 install requests -t /home/pi/domoticz/plugins/Sunscreen
+#sudo pip3 install lxml -t /home/pi/domoticz/plugins/Sunscreen
+#sudo pip3 install pandas -t /home/pi/domoticz/plugins/Sunscreen
+#sudo apt-get install libatlas-base-dev
+
 import Domoticz
 import sys
-#sudo pip3 install requests -t /home/pi/domoticz/plugins/Sunscreen
 import requests
 import datetime
 import math
 import calendar
 from urllib.request import urlopen
-#sudo pip3 install lxml -t /home/pi/domoticz/plugins/Sunscreen
-#sudo pip3 install pandas -t /home/pi/domoticz/plugins/Sunscreen
-#sudo apt-get install libatlas-base-dev
 from multiprocessing import Process, Queue
 import time
 
@@ -134,10 +135,6 @@ class BasePlugin:
         self.ConstantSolarRadiation     = 1361 # Solar Constant W/m²
         self.Year                       = datetime.datetime.now().year
         self.Yearday                    = datetime.datetime.now().timetuple().tm_yday
-        if calendar.isleap(self.Year):
-            self.DaysInYear             = 366
-        else:
-            self.DaysInYear             = 365
         self.AgularSpeed                = 360/365.25
         self.Declinaison                = math.degrees(math.asin(0.3978 * math.sin(math.radians(self.AgularSpeed) *(self.Yearday - (81 - 2 * math.sin((math.radians(self.AgularSpeed) * (self.Yearday - 2))))))))
         self.JustSun                    = False
@@ -147,16 +144,21 @@ class BasePlugin:
         self.HeartbeatCount             = -1
         self.Sunscreens                 = []
         self.weightedLux                = 0
-        if Parameters["Mode6"]=="True":
-            self.Debug                  = True
+        if calendar.isleap(self.Year):
+            self.DaysInYear             = 366
         else:
-            self.Debug                  = False
-        return
+            self.DaysInYear             = 365
 
     def onStart(self):
-        Domoticz.Heartbeat(30)
-        #Domoticz.Trace(True)
         try:
+            Domoticz.Heartbeat(30)
+            if Parameters["Mode6"]=="True":
+                self.Debug                  = True
+            else:
+                self.Debug                  = False
+
+            #Domoticz.Trace(True)
+            
             if not "Location" in Settings:
                 self.Error="Location not set in Settings, please update your settings."
                 Domoticz.Error(self.Error)
