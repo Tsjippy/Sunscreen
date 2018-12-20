@@ -2,7 +2,7 @@
 # Author: Tsjippy
 #
 """
-<plugin key="SunScreen" name="Sunscreen plugin" author="Tsjippy" version="1.2.0" wikilink="http://www.domoticz.com/wiki/plugins/plugin.html" externallink="https://wiki.domoticz.com/wiki/Real-time_solar_data_without_any_hardware_sensor_:_azimuth,_Altitude,_Lux_sensor...">
+<plugin key="SunScreen" name="Sunscreen plugin" author="Tsjippy" version="1.3.0" wikilink="http://www.domoticz.com/wiki/plugins/plugin.html" externallink="https://wiki.domoticz.com/wiki/Real-time_solar_data_without_any_hardware_sensor_:_azimuth,_Altitude,_Lux_sensor...">
     <description>
         <h2>Sunscreen plugin</h2><br/>
         This plugin calculates the virtual amount of LUX on your current location<br/>
@@ -129,35 +129,33 @@ class Sunscreen:
 class BasePlugin:
     enabled = False
     def __init__(self):
-        #self.var = 123
+        self.Error                      = False
+        self.ArbitraryTwilightLux       = 6.32     # W/m² egal 800 Lux     (the theoritical value is 4.74 but I have more accurate result with 6.32...)
+        self.ConstantSolarRadiation     = 1361 # Solar Constant W/m²
+        self.Year                       = datetime.datetime.now().year
+        self.Yearday                    = datetime.datetime.now().timetuple().tm_yday
+        if calendar.isleap(self.Year):
+            self.DaysInYear             = 366
+        else:
+            self.DaysInYear             = 365
+        self.AgularSpeed                = 360/365.25
+        self.Declinaison                = math.degrees(math.asin(0.3978 * math.sin(math.radians(self.AgularSpeed) *(self.Yearday - (81 - 2 * math.sin((math.radians(self.AgularSpeed) * (self.Yearday - 2))))))))
+        self.JustSun                    = False
+        self.Station                    = ""
+        self.Altitude                   = ""
+        self.Octa                       = ""
+        self.HeartbeatCount             = -1
+        self.Sunscreens                 = []
+        self.weightedLux                = 0
+        if Parameters["Mode6"]=="True":
+            self.Debug                  = True
+        else:
+            self.Debug                  = False
         return
 
     def onStart(self):
-        self.Error=False
-        self.ArbitraryTwilightLux=6.32     # W/m² egal 800 Lux     (the theoritical value is 4.74 but I have more accurate result with 6.32...)
-        self.ConstantSolarRadiation = 1361 # Solar Constant W/m²
-        self.Year=datetime.datetime.now().year
-        self.Yearday=datetime.datetime.now().timetuple().tm_yday
-        if calendar.isleap(self.Year):
-            self.DaysInYear=366
-        else:
-            self.DaysInYear=365
-        self.AgularSpeed = 360/365.25
-        self.Declinaison = math.degrees(math.asin(0.3978 * math.sin(math.radians(self.AgularSpeed) *(self.Yearday - (81 - 2 * math.sin((math.radians(self.AgularSpeed) * (self.Yearday - 2))))))))
         Domoticz.Heartbeat(30)
-        self.JustSun=False
-        self.Station=""
-        self.Altitude=""
-        self.Octa=""
-        self.HeartbeatCount=-1
-        self.Sunscreens=[]
-        self.weightedLux=0
-        if Parameters["Mode6"]=="True":
-            self.Debug=True
-        else:
-            self.Debug=False
         #Domoticz.Trace(True)
-
         try:
             if not "Location" in Settings:
                 self.Error="Location not set in Settings, please update your settings."
@@ -239,18 +237,21 @@ class BasePlugin:
         Domoticz.Log("Terminated running processes")
 
     def onCommand(self, Unit, Command, Level, Hue):
-        #Domoticz.Log("onCommand called for Unit " + str(Unit) + ": Parameter '" + str(Command) + "', Level: " + str(Level))
-        if str(Command)=='Set Level':
-            UpdateDevice(Unit, 2, Level)
-        else:
-            if Command == "Off":
-                UpdateDevice(Unit, 0, str(Command))
+        try:
+            #Domoticz.Log("onCommand called for Unit " + str(Unit) + ": Parameter '" + str(Command) + "', Level: " + str(Level))
+            if str(Command)=='Set Level':
+                UpdateDevice(Unit, 2, Level)
             else:
-                UpdateDevice(Unit, 1, str(Command))
+                if Command == "Off":
+                    UpdateDevice(Unit, 0, str(Command))
+                else:
+                    UpdateDevice(Unit, 1, str(Command))
+        except Exception as e:
+            senderror(e)
 
     def onHeartbeat(self):
-        if self.Error==False:
-            try:
+        try:
+            if self.Error==False:
                 if self.p1.exitcode == None or self.Station=="":
                     if self.q1.empty()==True:
                         Domoticz.Log("Parsing Ogimet station table data.")
@@ -295,17 +296,16 @@ class BasePlugin:
                             screen.CheckClose()
                     elif Devices[4].sValue=="On" and self.Debug==True:
                         Domoticz.Status("Not performing sunscreen actions as the override button is on.")
-
-            except Exception as e:
-                senderror(e)
-        else:
-            Domoticz.Error(self.Error)
+            else:
+                Domoticz.Error(self.Error)
+        except Exception as e:
+            senderror(e)
 
     def CheckWeatherDevices(self):
-        if self.Debug==True:
-            Domoticz.Log("Checking weather devices.")
-
         try:
+            if self.Debug==True:
+                Domoticz.Log("Checking weather devices.")
+
             if len(self.WeatherDevices)==1:
                 self.PressureDevice=self.WeatherDevices[0]
                 self.TemperatureDevice=""
@@ -373,6 +373,7 @@ class BasePlugin:
         except Exception as e:
             q.put("Url used to find your country is"+url)
             q.put('Error on line {}'.format(sys.exc_info()[-1].tb_lineno)+" Error is: " +str(e))
+
         try:
             #Find Ogimet station
             url="http://www.ogimet.com/display_stations.php?lang=en&tipo=AND&isyn=&oaci=&nombre=&estado="+country+"&Send=Send"
@@ -458,30 +459,33 @@ def senderror(e):
     return
 
 def SunLocation():
-    global _plugin
+    try:
+        global _plugin
 
-    if _plugin.Debug==True:
-        Domoticz.Log("Calculating sunlocation.")
+        if _plugin.Debug==True:
+            Domoticz.Log("Calculating sunlocation.")
 
-    #altitude of the Sun 
-    timeDecimal = (datetime.datetime.utcnow().hour + datetime.datetime.utcnow().minute / 60)
-    solarHour = timeDecimal + (4 * _plugin.Longitude / 60 )
-    hourlyAngle = 15 * ( 12 - solarHour )          
-    _plugin.sunAltitude = math.degrees(math.asin(math.sin(math.radians(_plugin.Latitude))* math.sin(math.radians(_plugin.Declinaison)) + math.cos(math.radians(_plugin.Latitude)) * math.cos(math.radians(_plugin.Declinaison)) * math.cos(math.radians(hourlyAngle))))
-    UpdateDevice(2, int(round(_plugin.sunAltitude)), int(round(_plugin.sunAltitude)))
-    
-    #azimut of the Sun
-    _plugin.azimuth = math.acos((math.sin(math.radians(_plugin.Declinaison)) - math.sin(math.radians(_plugin.Latitude)) * math.sin(math.radians(_plugin.sunAltitude))) / (math.cos(math.radians(_plugin.Latitude)) * math.cos(math.radians(_plugin.sunAltitude) ))) * 180 / math.pi 
-    sinAzimuth = (math.cos(math.radians(_plugin.Declinaison)) * math.sin(math.radians(hourlyAngle))) / math.cos(math.radians(_plugin.sunAltitude))
-    if(sinAzimuth<0):
-        _plugin.azimuth=360-_plugin.azimuth 
-    UpdateDevice(1,int(round(_plugin.azimuth)),int(round(_plugin.azimuth)))
+        #altitude of the Sun 
+        timeDecimal = (datetime.datetime.utcnow().hour + datetime.datetime.utcnow().minute / 60)
+        solarHour = timeDecimal + (4 * _plugin.Longitude / 60 )
+        hourlyAngle = 15 * ( 12 - solarHour )          
+        _plugin.sunAltitude = math.degrees(math.asin(math.sin(math.radians(_plugin.Latitude))* math.sin(math.radians(_plugin.Declinaison)) + math.cos(math.radians(_plugin.Latitude)) * math.cos(math.radians(_plugin.Declinaison)) * math.cos(math.radians(hourlyAngle))))
+        UpdateDevice(2, int(round(_plugin.sunAltitude)), int(round(_plugin.sunAltitude)))
+        
+        #azimut of the Sun
+        _plugin.azimuth = math.acos((math.sin(math.radians(_plugin.Declinaison)) - math.sin(math.radians(_plugin.Latitude)) * math.sin(math.radians(_plugin.sunAltitude))) / (math.cos(math.radians(_plugin.Latitude)) * math.cos(math.radians(_plugin.sunAltitude) ))) * 180 / math.pi 
+        sinAzimuth = (math.cos(math.radians(_plugin.Declinaison)) * math.sin(math.radians(hourlyAngle))) / math.cos(math.radians(_plugin.sunAltitude))
+        if(sinAzimuth<0):
+            _plugin.azimuth=360-_plugin.azimuth 
+        UpdateDevice(1,int(round(_plugin.azimuth)),int(round(_plugin.azimuth)))
+    except Exception as e:
+        senderror(e)
 
 def Cloudlayer():
-    global _plugin
-    if _plugin.Debug==True:
-        Domoticz.Log("Retrieving cloudlayer.")
     try:
+        global _plugin
+        if _plugin.Debug==True:
+            Domoticz.Log("Retrieving cloudlayer.")
         result=""
         UTC=datetime.datetime.utcnow()
         hour=UTC.hour
@@ -502,7 +506,7 @@ def Cloudlayer():
                 result=""
 
         result=result.split(" "+_plugin.Station+" ")
-        Octa=int(result[len(result)-1].split(" ")[0][0])
+        Octa=int(result[len(result)-1].split(" ")[1][0])
         if Octa != _plugin.Octa:
             _plugin.Octa=Octa
             Domoticz.Log("Updated cloudlayer to "+str(_plugin.Octa))
@@ -512,11 +516,11 @@ def Cloudlayer():
         senderror(e)
 
 def VirtualLux():
-    global _plugin
-    if _plugin.Debug==True:
-        Domoticz.Log("Calculating virtual lux.")
-
     try:
+        global _plugin
+        if _plugin.Debug==True:
+            Domoticz.Log("Calculating virtual lux.")
+
         RadiationAtm = _plugin.ConstantSolarRadiation * (1 +0.034 * math.cos( math.radians( 360 * _plugin.Yearday / _plugin.DaysInYear )))   
         absolutePressure = _plugin.Pressure - round((_plugin.Altitude/ 8.3),1) # hPa
         sinusSunAltitude = math.sin(math.radians(_plugin.sunAltitude))
@@ -553,20 +557,23 @@ def VirtualLux():
 # on the earth (specified in decimal degrees)
 #
 def haversine(lat1, lon1, lat2, lon2):
-    # Convert decimal degrees to radians
-    lat1, lon1, lat2, lon2 = map(math.radians, [ lat1, lon1, lat2, lon2 ])
+    try:
+        # Convert decimal degrees to radians
+        lat1, lon1, lat2, lon2 = map(math.radians, [ lat1, lon1, lat2, lon2 ])
 
-    # Haversine formula
-    dlat = math.fabs(lat2 - lat1)
-    dlon = math.fabs(lon2 - lon1)
-    a = math.sin(dlat / 2) ** 2 + math.cos(lat1) * math.cos(lat2) * math.sin(dlon / 2) ** 2
-    c = 2 * math.asin(math.sqrt(a))
-    km = c * 6367
-    return km    
+        # Haversine formula
+        dlat = math.fabs(lat2 - lat1)
+        dlon = math.fabs(lon2 - lon1)
+        a = math.sin(dlat / 2) ** 2 + math.cos(lat1) * math.cos(lat2) * math.sin(dlon / 2) ** 2
+        c = 2 * math.asin(math.sqrt(a))
+        km = c * 6367
+        return km
+    except Exception as e:
+        senderror(e)  
 
 def Altitude(q):
-    global _plugin
     try:
+        global _plugin
         headers = {
             'Accept': 'application/json',
             'Content-Type': 'application/json',
@@ -582,9 +589,9 @@ def Altitude(q):
             q.put('Error on line {}'.format(sys.exc_info()[-1].tb_lineno)+" Error is: " +str(e))
 
 def createDevices():
-    global _plugin
-    #Check if variable needs to be created
     try:
+        global _plugin
+        #Check if variable needs to be created
         if 1 not in Devices:
             Domoticz.Log("Created 'Azimut' device")
             Domoticz.Device(Name="Azimut", Unit=1, TypeName="Custom", Used=1).Create()
