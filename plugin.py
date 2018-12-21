@@ -2,7 +2,7 @@
 # Author: Tsjippy
 #
 """
-<plugin key="SunScreen" name="Sunscreen plugin" author="Tsjippy" version="1.3.1" wikilink="http://www.domoticz.com/wiki/plugins/plugin.html" externallink="https://wiki.domoticz.com/wiki/Real-time_solar_data_without_any_hardware_sensor_:_azimuth,_Altitude,_Lux_sensor...">
+<plugin key="SunScreen" name="Sunscreen plugin" author="Tsjippy" version="1.3.2" wikilink="http://www.domoticz.com/wiki/plugins/plugin.html" externallink="https://wiki.domoticz.com/wiki/Real-time_solar_data_without_any_hardware_sensor_:_azimuth,_Altitude,_Lux_sensor...">
     <description>
         <h2>Sunscreen plugin</h2><br/>
         This plugin calculates the virtual amount of LUX on your current location<br/>
@@ -158,7 +158,7 @@ class BasePlugin:
                 self.Debug                  = False
 
             #Domoticz.Trace(True)
-            
+
             if not "Location" in Settings:
                 self.Error="Location not set in Settings, please update your settings."
                 Domoticz.Error(self.Error)
@@ -490,7 +490,7 @@ def Cloudlayer():
             Domoticz.Log("Retrieving cloudlayer.")
         result=""
         UTC=datetime.datetime.utcnow()
-        hour=UTC.hour
+        hour=UTC.hour+1
 
         while result=="":
             if len(str(int(hour)-1))==1:
@@ -508,14 +508,22 @@ def Cloudlayer():
                 result=""
 
         result=result.split(" "+_plugin.Station+" ")
-        Octa=int(result[len(result)-1].split(" ")[1][0])
+        Octa=int(result[1].split(" ")[1][0])
+        if Octa == 9:
+            Octa = 8
         if Octa != _plugin.Octa:
             _plugin.Octa=Octa
             Domoticz.Log("Updated cloudlayer to "+str(_plugin.Octa))
     except Exception as e:
-        Domoticz.Log("Cloudlayer url is "+url)
-        Domoticz.Log(str(result))
+        if _plugin.Debug==False:
+            Domoticz.Log("Ogimet url is: "+url)
+        Domoticz.Log("Result is "+str(result))
         senderror(e)
+        Domoticz.Error("Station is "+_plugin.Station)
+        Domoticz.Error(str(urlopen(url).read().decode('utf-8')))
+        Domoticz.Error(str(result.split(" "+_plugin.Station+" ")))
+        Domoticz.Error(str(result[len(result)-1].split(" ")))
+        Domoticz.Error(str(result[len(result)-1].split(" ")[1]))
 
 def VirtualLux():
     try:
