@@ -2,7 +2,7 @@
 # Author: Tsjippy
 #
 """
-<plugin key="SunScreen" name="Sunscreen plugin" author="Tsjippy" version="1.3.2" wikilink="http://www.domoticz.com/wiki/plugins/plugin.html" externallink="https://wiki.domoticz.com/wiki/Real-time_solar_data_without_any_hardware_sensor_:_azimuth,_Altitude,_Lux_sensor...">
+<plugin key="SunScreen" name="Sunscreen plugin" author="Tsjippy" version="1.3.5" wikilink="http://www.domoticz.com/wiki/plugins/plugin.html" externallink="https://wiki.domoticz.com/wiki/Real-time_solar_data_without_any_hardware_sensor_:_azimuth,_Altitude,_Lux_sensor...">
     <description>
         <h2>Sunscreen plugin</h2><br/>
         This plugin calculates the virtual amount of LUX on your current location<br/>
@@ -140,7 +140,7 @@ class BasePlugin:
         self.JustSun                    = False
         self.Station                    = ""
         self.Altitude                   = ""
-        self.Octa                       = ""
+        self.Octa                       = 0
         self.HeartbeatCount             = -1
         self.Sunscreens                 = []
         self.weightedLux                = 0
@@ -508,7 +508,12 @@ def Cloudlayer():
                 result=""
 
         result=result.split(" "+_plugin.Station+" ")
-        Octa=int(result[1].split(" ")[1][0])
+        Octa=result[1].split(" ")[1][0]
+        if Octa == "/":
+            Octa=_plugin.Octa
+        else:
+            Octa=int(Octa)
+
         if Octa == 9:
             Octa = 8
         if Octa != _plugin.Octa:
@@ -522,8 +527,8 @@ def Cloudlayer():
         Domoticz.Error("Station is "+_plugin.Station)
         Domoticz.Error(str(urlopen(url).read().decode('utf-8')))
         Domoticz.Error(str(result.split(" "+_plugin.Station+" ")))
-        Domoticz.Error(str(result[len(result)-1].split(" ")))
-        Domoticz.Error(str(result[len(result)-1].split(" ")[1]))
+        Domoticz.Error(str(result[1].split(" ")))
+        Domoticz.Error(str(result[1].split(" ")[1]))
 
 def VirtualLux():
     try:
