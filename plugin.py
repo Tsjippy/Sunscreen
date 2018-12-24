@@ -2,7 +2,7 @@
 # Author: Tsjippy
 #
 """
-<plugin key="SunScreen" name="Sunscreen plugin" author="Tsjippy" version="1.3.5" wikilink="http://www.domoticz.com/wiki/plugins/plugin.html" externallink="https://wiki.domoticz.com/wiki/Real-time_solar_data_without_any_hardware_sensor_:_azimuth,_Altitude,_Lux_sensor...">
+<plugin key="SunScreen" name="Sunscreen plugin" author="Tsjippy" version="1.3.6" wikilink="http://www.domoticz.com/wiki/plugins/plugin.html" externallink="https://wiki.domoticz.com/wiki/Real-time_solar_data_without_any_hardware_sensor_:_azimuth,_Altitude,_Lux_sensor...">
     <description>
         <h2>Sunscreen plugin</h2><br/>
         This plugin calculates the virtual amount of LUX on your current location<br/>
@@ -223,6 +223,7 @@ class BasePlugin:
                 self.CheckWeatherDevices()
 
                 createDevices()
+                Domoticz.Log("On Start finished.")
         except Exception as e:
             self.Error="Something went wrong during boot. Please chack the logs."
             senderror(e)
@@ -257,31 +258,36 @@ class BasePlugin:
                 if self.p1.exitcode == None or self.Station=="":
                     if self.q1.empty()==True:
                         Domoticz.Log("Parsing Ogimet station table data.")
-                    while self.q1.empty()==False:
-                        result=str(self.q1.get())
-                        if "Error" in result:
+                    else:
+                        while self.q1.empty()==False:
+                            result=str(self.q1.get())
+                            if "Error" in result:
+                                Domoticz.Error(result)
+                                self.Error="Could not find Ogimet station."
+                            elif "Found station " in result:
+                                Domoticz.Log(result)
+                                self.Station=result.split(":")[1].split(" ")[0]
+                            else:
+                                Domoticz.Log(result)
+                if self.Altitude=="":
+                    while self.q2.empty()==False:
+                        result=self.q2.get()
+                        if "Error" in str(result):
                             Domoticz.Error(result)
-                            self.Error="Could not find Ogimet station."
-                        elif "Found station " in result:
-                            Domoticz.Log(result)
-                            self.Station=result.split(":")[1].split(" ")[0]
+                            self.Altitude=1
+                            Domoticz.Log("Could not find altitude, using default of 1 meter.")
+                        elif "Altitude is " in result:
+                            self.Altitude=int(result.split("Altitude is ")[1])
+                            Domoticz.Log(result+" meter.")
                         else:
                             Domoticz.Log(result)
-                if self.p2.exitcode != None and self.Altitude=="":
-                    result=self.q2.get()
-                    if "Error" in str(result):
-                        Domoticz.Error(result)
-                        self.Altitude=1
-                        Domoticz.Log("Could not find altitude, using default of 1 meter.")
-                    else:
-                        self.Altitude=int(result)
-                        Domoticz.Log("Altitude is "+str(self.Altitude)+" meter.")
                 elif self.Station!="" and self.Altitude!="":
                     self.Pressure=requests.get(url=self.url+"/json.htm?type=devices&rid="+self.PressureIDX).json()['result'][0]["Barometer"]
 
                     SunLocation()
 
                     Cloudlayer()
+
                     if self.Debug==True:
                         Domoticz.Log("Current cloudlayer is "+str(self.Octa))
 
@@ -298,6 +304,8 @@ class BasePlugin:
                             screen.CheckClose()
                     elif Devices[4].sValue=="On" and self.Debug==True:
                         Domoticz.Status("Not performing sunscreen actions as the override button is on.")
+                else:
+                    Domoticz.Log("Checking Altitude.")
             else:
                 Domoticz.Error(self.Error)
         except Exception as e:
@@ -378,6 +386,7 @@ class BasePlugin:
 
         try:
             #Find Ogimet station
+            stations=[]
             url="http://www.ogimet.com/display_stations.php?lang=en&tipo=AND&isyn=&oaci=&nombre=&estado="+country+"&Send=Send"
             if self.Debug==True:
                 q.put("Url to find all Ogimet stations is "+url)
@@ -413,12 +422,52 @@ class BasePlugin:
                         #Check if station has data
                         url="https://www.ogimet.com/cgi-bin/gsynres?lang=en&ind="+df_list[1][0][i]
                         result=urlopen(url).read().decode('utf-8')
+
                         if not "No valid data found in database for " in result:
-                            #Use station
-                            mindist=dist
-                            station=df_list[1][0][i]
-                            stationname=df_list[1][2][i]
-            q.put("Found station '"+stationname+"' with id:"+station+" on "+str(round(mindist,1))+"km of your location.",True)
+                            q.put("Checking station "+str(df_list[1][0][i]))
+                            UTC=datetime.datetime.utcnow()
+                            hour=UTC.hour
+
+                            if len(str(int(hour)-2))==1:
+                                hour="0"+str(int(hour)-2)
+                            else:
+                                hour=str(int(hour)-2)
+                            UTCtime=str(UTC.year)+str(UTC.month)+str(UTC.day)+hour+"00"
+                            url="http://www.ogimet.com/cgi-bin/getsynop?block="+df_list[1][0][i]+"&begin="+UTCtime
+
+                            result=requests.get(url)
+                            if result.status_code == 200 and not "Status" in result.text:
+                                result=result.text
+                                q.put("Result is "+result)
+                                if result == "":
+                                    q.put("Empty result, url used is "+url)
+                            else:
+                                q.put("No result for station "+df_list[1][0][i])
+                                result =""
+
+                            if result !="":
+                                result=result.split(" "+df_list[1][0][i]+" ")
+                                Octa=result[1].split(" ")[1][0]
+                                q.put("Found octa of "+str(Octa))
+                                if Octa != "/":
+                                    #Use station
+                                    mindist=dist
+                                    station=df_list[1][0][i]
+                                    stationname=df_list[1][2][i]
+                                else:
+                                    stations+=[[dist,df_list[1][0][i],df_list[1][2][i]]]
+
+
+            if station=="No station found." or mindist > 50:
+                mindist=1000
+                for stat in stations:
+                    if stat[0] < mindist:
+                        mindist=stat[0]
+                        station=stat[1]
+                        stationname=stat[2]
+                q.put("Found station2 '"+stationname+"' with id:"+station+" on "+str(round(mindist,1))+"km of your location.",True)
+            else:                
+                q.put("Found station '"+stationname+"' with id:"+station+" on "+str(round(mindist,1))+"km of your location.",True)
         except Exception as e:
             q.put('Error on line {}'.format(sys.exc_info()[-1].tb_lineno)+" Error is: " +str(e))
 
@@ -501,34 +550,38 @@ def Cloudlayer():
             url="http://www.ogimet.com/cgi-bin/getsynop?block="+_plugin.Station+"&begin="+UTCtime
 
             if _plugin.Debug==True:
-                Domoticz.Log("Ogimet url is: "+url)
+                Domoticz.Log("Trying this Ogimet url: "+url)
 
-            result=urlopen(url).read().decode('utf-8')
-            if "Status:" in result:
+            result=requests.get(url)
+            if result.status_code == 200 and not "Status" in result.text:
+                result=result.text
+                if result=="" and _plugin.Debug==True:
+                    Domoticz.Log("Got an empty result, will try an hour earlier.")
+            else:
+                Domoticz.Error("Could not retrieve cloudlayer, using previous value of "+str(_plugin.Octa)+". Error is "+ str(result.text))
                 result=""
+                break
 
-        result=result.split(" "+_plugin.Station+" ")
-        Octa=result[1].split(" ")[1][0]
-        if Octa == "/":
-            Octa=_plugin.Octa
-        else:
-            Octa=int(Octa)
+        if result !="":
+            result=result.split(" "+_plugin.Station+" ")
+            Octa=result[1].split(" ")[1][0]
+            if Octa == "/":
+                if _plugin.Debug==True:
+                    Domoticz.Log("Cloud layer not available, using previous value.")
+                Octa=_plugin.Octa
+            else:
+                Octa=int(Octa)
 
-        if Octa == 9:
-            Octa = 8
-        if Octa != _plugin.Octa:
-            _plugin.Octa=Octa
-            Domoticz.Log("Updated cloudlayer to "+str(_plugin.Octa))
+            if Octa == 9:
+                Octa = 8
+            if Octa != _plugin.Octa:
+                _plugin.Octa=Octa
+                Domoticz.Log("Updated cloudlayer to "+str(_plugin.Octa))
     except Exception as e:
         if _plugin.Debug==False:
             Domoticz.Log("Ogimet url is: "+url)
-        Domoticz.Log("Result is "+str(result))
+        Domoticz.Log("Ogimet url is: "+url+" Result is "+str(result)+" Result status code is "+str(requests.get(url).status_code))
         senderror(e)
-        Domoticz.Error("Station is "+_plugin.Station)
-        Domoticz.Error(str(urlopen(url).read().decode('utf-8')))
-        Domoticz.Error(str(result.split(" "+_plugin.Station+" ")))
-        Domoticz.Error(str(result[1].split(" ")))
-        Domoticz.Error(str(result[1].split(" ")[1]))
 
 def VirtualLux():
     try:
@@ -586,22 +639,28 @@ def haversine(lat1, lon1, lat2, lon2):
     except Exception as e:
         senderror(e)  
 
-def Altitude(q):
-    try:
-        global _plugin
-        headers = {
-            'Accept': 'application/json',
-            'Content-Type': 'application/json',
-        }
-        data = '{"locations":[{"latitude":'+str(_plugin.Latitude)+',"longitude":'+str(_plugin.Longitude)+'}]}'
-        response = requests.post('https://api.open-elevation.com/api/v1/lookup', headers=headers, data=data).json()
-        Altitude=response["results"][0]['elevation']
-        q.put(Altitude)
-    except Exception as e:
-        if "Expecting value" in str(e):
-            q.put(1)
-        else:
-            q.put('Error on line {}'.format(sys.exc_info()[-1].tb_lineno)+" Error is: " +str(e))
+def Altitude(q,):
+    x=0
+    while True:
+        x+=1
+        try:
+            global _plugin
+            headers = {
+                'Accept': 'application/json',
+                'Content-Type': 'application/json',
+            }
+            data = '{"locations":[{"latitude":'+str(_plugin.Latitude)+',"longitude":'+str(_plugin.Longitude)+'}]}'
+            response = requests.post('https://api.open-elevation.com/api/v1/lookup', headers=headers, data=data).json()
+            Altitude=response["results"][0]['elevation']
+            q.put("Altitude is "+str(Altitude))
+            break
+        except Exception as e:
+            if ("Expecting value" in str(e) or "Connection aborted" in str(e)) and x < 6:
+                q.put("Retrying altitude.")
+                continue
+            else:
+                q.put('Error on line {}'.format(sys.exc_info()[-1].tb_lineno)+" Error is: " +str(e))
+
 
 def createDevices():
     try:
