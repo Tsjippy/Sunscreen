@@ -2,7 +2,7 @@
 # Author: Tsjippy
 #
 """
-<plugin key="SunScreen" name="Sunscreen plugin" author="Tsjippy" version="1.3.6" wikilink="http://www.domoticz.com/wiki/plugins/plugin.html" externallink="https://wiki.domoticz.com/wiki/Real-time_solar_data_without_any_hardware_sensor_:_azimuth,_Altitude,_Lux_sensor...">
+<plugin key="SunScreen" name="Sunscreen plugin" author="Tsjippy" version="1.3.7" wikilink="http://www.domoticz.com/wiki/plugins/plugin.html" externallink="https://wiki.domoticz.com/wiki/Real-time_solar_data_without_any_hardware_sensor_:_azimuth,_Altitude,_Lux_sensor...">
     <description>
         <h2>Sunscreen plugin</h2><br/>
         This plugin calculates the virtual amount of LUX on your current location<br/>
@@ -436,9 +436,8 @@ class BasePlugin:
                             url="http://www.ogimet.com/cgi-bin/getsynop?block="+df_list[1][0][i]+"&begin="+UTCtime
 
                             result=requests.get(url)
-                            if result.status_code == 200 and not "Status" in result.text:
+                            if result.status_code == 200 and not "Status" in result.text and not "Max retries exceeded with url:"  in result.text:
                                 result=result.text
-                                q.put("Result is "+result)
                                 if result == "":
                                     q.put("Empty result, url used is "+url)
                             else:
@@ -448,7 +447,9 @@ class BasePlugin:
                             if result !="":
                                 result=result.split(" "+df_list[1][0][i]+" ")
                                 Octa=result[1].split(" ")[1][0]
-                                q.put("Found octa of "+str(Octa))
+
+                                if self.Debug==True:
+                                    q.put("Found octa of "+str(Octa))
                                 if Octa != "/":
                                     #Use station
                                     mindist=dist
@@ -465,7 +466,7 @@ class BasePlugin:
                         mindist=stat[0]
                         station=stat[1]
                         stationname=stat[2]
-                q.put("Found station2 '"+stationname+"' with id:"+station+" on "+str(round(mindist,1))+"km of your location.",True)
+                q.put("Found station '"+stationname+"' with id:"+station+" on "+str(round(mindist,1))+"km of your location. (This station does currently not supply any cloudlayer data, but non of the stations within 50 km of your location do.)",True)
             else:                
                 q.put("Found station '"+stationname+"' with id:"+station+" on "+str(round(mindist,1))+"km of your location.",True)
         except Exception as e:
@@ -553,12 +554,12 @@ def Cloudlayer():
                 Domoticz.Log("Trying this Ogimet url: "+url)
 
             result=requests.get(url)
-            if result.status_code == 200 and not "Status" in result.text:
+            if result.status_code == 200 and not "Status" in result.text and not "Max retries exceeded with url:"  in result.text:
                 result=result.text
                 if result=="" and _plugin.Debug==True:
                     Domoticz.Log("Got an empty result, will try an hour earlier.")
             else:
-                Domoticz.Error("Could not retrieve cloudlayer, using previous value of "+str(_plugin.Octa)+". Error is "+ str(result.text))
+                Domoticz.Log("Could not retrieve cloudlayer, using previous value of "+str(_plugin.Octa)+". Error is "+ str(result.text)+" Result code is "+str(result.status_code))
                 result=""
                 break
 
