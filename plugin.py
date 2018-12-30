@@ -2,7 +2,7 @@
 # Author: Tsjippy
 #
 """
-<plugin key="SunScreen" name="Sunscreen plugin" author="Tsjippy" version="1.3.9" wikilink="http://www.domoticz.com/wiki/plugins/plugin.html" externallink="https://wiki.domoticz.com/wiki/Real-time_solar_data_without_any_hardware_sensor_:_azimuth,_Altitude,_Lux_sensor...">
+<plugin key="SunScreen" name="Sunscreen plugin" author="Tsjippy" version="1.4.0" wikilink="http://www.domoticz.com/wiki/plugins/plugin.html" externallink="https://wiki.domoticz.com/wiki/Real-time_solar_data_without_any_hardware_sensor_:_azimuth,_Altitude,_Lux_sensor...">
     <description>
         <h2>Sunscreen plugin</h2><br/>
         This plugin calculates the virtual amount of LUX on your current location<br/>
@@ -422,7 +422,9 @@ class BasePlugin:
                         result=urlopen(url).read().decode('utf-8')
 
                         if not "No valid data found in database for " in result:
-                            q.put("Checking station "+str(df_list[1][0][i]))
+                            if self.Debug==True:
+                                q.put("Checking station "+str(df_list[1][0][i]))
+                                
                             UTC=datetime.datetime.utcnow()
                             hour=UTC.hour
 
