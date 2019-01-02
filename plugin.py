@@ -2,7 +2,7 @@
 # Author: Tsjippy
 #
 """
-<plugin key="SunScreen" name="Sunscreen plugin" author="Tsjippy" version="1.4.0" wikilink="http://www.domoticz.com/wiki/plugins/plugin.html" externallink="https://wiki.domoticz.com/wiki/Real-time_solar_data_without_any_hardware_sensor_:_azimuth,_Altitude,_Lux_sensor...">
+<plugin key="SunScreen" name="Sunscreen plugin" author="Tsjippy" version="1.4.1" wikilink="http://www.domoticz.com/wiki/plugins/plugin.html" externallink="https://wiki.domoticz.com/wiki/Real-time_solar_data_without_any_hardware_sensor_:_azimuth,_Altitude,_Lux_sensor...">
     <description>
         <h2>Sunscreen plugin</h2><br/>
         This plugin calculates the virtual amount of LUX on your current location<br/>
@@ -426,13 +426,7 @@ class BasePlugin:
                                 q.put("Checking station "+str(df_list[1][0][i]))
                                 
                             UTC=datetime.datetime.utcnow()
-                            hour=UTC.hour
-
-                            if len(str(int(hour)-2))==1:
-                                hour="0"+str(int(hour)-2)
-                            else:
-                                hour=str(int(hour)-2)
-                            UTCtime=str(UTC.year)+str(UTC.month)+str(UTC.day)+hour+"00"
+                            UTCtime=datetime.datetime.strftime(UTC+datetime.timedelta(hours=-2),'%Y%m%d%H')+"00"
                             url="http://www.ogimet.com/cgi-bin/getsynop?block="+df_list[1][0][i]+"&begin="+UTCtime
 
                             result=requests.get(url)
@@ -540,14 +534,11 @@ def Cloudlayer():
             Domoticz.Log("Retrieving cloudlayer.")
         result=""
         UTC=datetime.datetime.utcnow()
-        hour=UTC.hour+1
+        delta = 1
 
         while result=="":
-            if len(str(int(hour)-1))==1:
-                hour="0"+str(int(hour)-1)
-            else:
-                hour=str(int(hour)-1)
-            UTCtime=str(UTC.year)+str(UTC.month)+str(UTC.day)+hour+"00"
+            delta -= 1
+            UTCtime=datetime.datetime.strftime(UTC+datetime.timedelta(hours=delta),'%Y%m%d%H')+"00"
             url="http://www.ogimet.com/cgi-bin/getsynop?block="+_plugin.Station+"&begin="+UTCtime
 
             if _plugin.Debug==True:
@@ -559,7 +550,7 @@ def Cloudlayer():
                 if result=="" and _plugin.Debug==True:
                     Domoticz.Log("Got an empty result, will try an hour earlier.")
             else:
-                Domoticz.Log("Could not retrieve cloudlayer, using previous value of "+str(_plugin.Octa)+". Error is "+ str(result.text)+" Result code is "+str(result.status_code))
+                Domoticz.Log("Could not retrieve cloudlayer, using previous value of "+str(_plugin.Octa)+". Error is "+ str(result.text)+" URL is "+url)
                 result=""
                 break
 
@@ -660,8 +651,8 @@ def Altitude(q,):
                 q.put("Retrying altitude.")
                 time.sleep(10)
                 continue
-            else:
-                q.put('Error on line {}'.format(sys.exc_info()[-1].tb_lineno)+" Error is: " +str(e))
+            #else:
+                #q.put('Error on line {}'.format(sys.exc_info()[-1].tb_lineno)+" Error is: " +str(e))
 
 
 def createDevices():
