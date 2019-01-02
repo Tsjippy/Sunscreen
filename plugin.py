@@ -2,7 +2,7 @@
 # Author: Tsjippy
 #
 """
-<plugin key="SunScreen" name="Sunscreen plugin" author="Tsjippy" version="1.4.1" wikilink="http://www.domoticz.com/wiki/plugins/plugin.html" externallink="https://wiki.domoticz.com/wiki/Real-time_solar_data_without_any_hardware_sensor_:_azimuth,_Altitude,_Lux_sensor...">
+<plugin key="SunScreen" name="Sunscreen plugin" author="Tsjippy" version="1.4.2" wikilink="http://www.domoticz.com/wiki/plugins/plugin.html" externallink="https://wiki.domoticz.com/wiki/Real-time_solar_data_without_any_hardware_sensor_:_azimuth,_Altitude,_Lux_sensor...">
     <description>
         <h2>Sunscreen plugin</h2><br/>
         This plugin calculates the virtual amount of LUX on your current location<br/>
@@ -158,7 +158,6 @@ class BasePlugin:
                 self.Debug                  = False
 
             #Domoticz.Trace(True)
-
             if not "Location" in Settings:
                 self.Error="Location not set in Settings, please update your settings."
                 Domoticz.Error(self.Error)
@@ -345,12 +344,12 @@ class BasePlugin:
                         Domoticz.Log("Found temperature device '"+str(self.TemperatureDevice)+ "' Current temperature: "+str(self.Temperature)+" °C.")
                     if device["Name"]==self.WindDevice:
                         self.WindIDX=device["idx"]
-                        self.Wind=int(device["Data"].split(";")[2])/10
-                        self.Gust=int(device["Data"].split(";")[3])/10
+                        self.Wind=float(device["Speed"])
+                        self.Gust=float(device["Gust"])
                         Domoticz.Log("Found wind device '"+str(self.WindDevice)+"' current wind: "+str(self.Wind)+" m/s. Current wind gust: " +str(self.Gust)+" m/s.")
                     if device["Name"]==self.RainDevice:
                         self.RainIDX=device["idx"]
-                        self.Rain=int(device["Data"])
+                        self.Rain=int(device["Rain"])
                         Domoticz.Log("Found rain device '"+str(self.RainDevice)+"' current expected rain: "+str(self.Rain)+" mm.")
                     if device["Name"]==self.PressureDevice:
                         self.PressureIDX=device["idx"]
