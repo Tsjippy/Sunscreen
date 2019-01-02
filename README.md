@@ -40,3 +40,4 @@ Releases
 2018-12-13: Initial release (1.0.0) <br/>
 2018-12-17: Now supports multiple sunscreens, and searches for the best Ogimet station automatically. Also retrieves the altitude automatically.<br/>
 2018-12-18 (1.1.3): Fixes a problem resulting not being able to update the hardware, added a sunscreen override button.<br/>
+2019-01-02 (1.4.1): Ogimet url bug fix, it now uses leading zeros for month and day in the url
