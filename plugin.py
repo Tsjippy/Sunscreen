@@ -2,7 +2,7 @@
 # Author: Tsjippy
 #
 """
-<plugin key="SunScreen" name="Sunscreen plugin" author="Tsjippy" version="1.4.2" wikilink="http://www.domoticz.com/wiki/plugins/plugin.html" externallink="https://wiki.domoticz.com/wiki/Real-time_solar_data_without_any_hardware_sensor_:_azimuth,_Altitude,_Lux_sensor...">
+<plugin key="SunScreen" name="Sunscreen plugin" author="Tsjippy" version="1.5.0" wikilink="http://www.domoticz.com/wiki/plugins/plugin.html" externallink="https://wiki.domoticz.com/wiki/Real-time_solar_data_without_any_hardware_sensor_:_azimuth,_Altitude,_Lux_sensor...">
     <description>
         <h2>Sunscreen plugin</h2><br/>
         This plugin calculates the virtual amount of LUX on your current location<br/>
@@ -20,18 +20,16 @@
         If you need more sunscreens, just add 5 extra sun thresholds like this:<br/>
         Azimut1 low;Azimut1 high; Altitude1 low; Altitude1 mid; Altidtude1 high;Azimut2 low;Azimut2 high; Altitude2 low; Altitude2 mid; Altidtude2 high<br/>
         Fill in your weather thresholds in this order: Lux low; Lux high;Temp low (°C); Temp high (°C);Wind (m/s);Gust(m/s);Rain(mm)<br/>
-        Fill in your weatherdevice names in this order: Pressure device;Temperature device;Wind device;Rain device<br/>
     </description>
     <params>
         <param field="Mode1" label="Switchtime threshold (minutes)" width="200px" required="true" default="30"/>
         <param field="Mode2" label="Sun thresholds" width="1000px" default="Azimut low;Azimut high; Altitude low; Altitude mid; Altidtude high"/>
-        <param field="Mode3" label="Weather thresholds" width="1000px" default=""/>
-        <param field="Mode4" label="Wheater devices" width="1000px" required="true" default="Pressure;Temp;Wind;Rain"/>
+        <param field="Mode3" label="Weather thresholds" width="1000px" default="60000;80000;15;20;10;15;0"/>
         <param field="Mode5" label="Domoticz url and port" width="200px" required="true" default="http://127.0.0.1:8080"/>
         <param field="Mode6" label="Debug" width="100px">
             <options>
                 <option label="True" value="True" />
-                <option label="False" value="False" default="True"/>
+                <option label="False" value="False" default="False"/>
             </options>
         </param>
     </params>
@@ -45,6 +43,15 @@
 
 import Domoticz
 import sys
+import os
+
+major,minor,x,y,z = sys.version_info
+if (os.name == 'nt'):
+    Domoticz.Error("Windows is currently not supported.")
+else:
+    sys.path.append('/usr/lib/python3/dist-packages')
+    sys.path.append('/usr/local/lib/python'+str(major)+'.'+str(minor)+'/dist-packages')
+
 import requests
 import datetime
 import math
@@ -52,6 +59,7 @@ import calendar
 from urllib.request import urlopen
 from multiprocessing import Process, Queue
 import time
+import pandas
 
 class Sunscreen:
     global _plugin
@@ -182,7 +190,6 @@ class BasePlugin:
                 self.Thresholds={}
                 SunThresholds=Parameters["Mode2"].split(";")
                 WeatherThresholds=Parameters["Mode3"].split(";")
-                self.WeatherDevices=Parameters["Mode4"].split(";")
                 self.url=Parameters["Mode5"]
 
                 if SunThresholds==[""]:
@@ -313,23 +320,6 @@ class BasePlugin:
             if self.Debug==True:
                 Domoticz.Log("Checking weather devices.")
 
-            if len(self.WeatherDevices)==1:
-                self.PressureDevice=self.WeatherDevices[0]
-                self.TemperatureDevice=""
-                self.WindDevice=""
-                self.RainDevice=""
-                if self.JustSun==False:
-                    self.JustSun=True
-                    Domoticz.Status("Just found one weatherdevice, so no sunscreen device will be created.")
-            elif len(self.WeatherDevices)==4:
-                self.PressureDevice=self.WeatherDevices[0]
-                self.TemperatureDevice=self.WeatherDevices[1]
-                self.WindDevice=self.WeatherDevices[2]
-                self.RainDevice=self.WeatherDevices[3]
-            else:
-                self.Error="You should specify at least a pressure device, and optional a temperature, wind and rain device, but you defined "+str(len(devices))+" devices. Please update the hardware settings of this plugin."
-                Domoticz.Error(self.Error)
-
             if self.Error==False:
                 try:
                     AllDevices = requests.get(url=self.url+"/json.htm?type=devices&used=true").json()['result']
@@ -338,23 +328,23 @@ class BasePlugin:
                     senderror(e)
 
                 for device in AllDevices:
-                    if device["Name"]==self.TemperatureDevice:
+                    if "Temp" in device:
                         self.TemperatureIDX=device["idx"]
                         self.Temperature=float(device["Temp"])
-                        Domoticz.Log("Found temperature device '"+str(self.TemperatureDevice)+ "' Current temperature: "+str(self.Temperature)+" °C.")
-                    if device["Name"]==self.WindDevice:
+                        Domoticz.Log("Found temperature device '"+device["Name"]+ "' Current temperature: "+str(self.Temperature)+" °C.")
+                    if device["Type"] == "Wind":
                         self.WindIDX=device["idx"]
                         self.Wind=float(device["Speed"])
                         self.Gust=float(device["Gust"])
-                        Domoticz.Log("Found wind device '"+str(self.WindDevice)+"' current wind: "+str(self.Wind)+" m/s. Current wind gust: " +str(self.Gust)+" m/s.")
-                    if device["Name"]==self.RainDevice:
+                        Domoticz.Log("Found wind device '"+device["Name"]+"' current wind: "+str(self.Wind)+" m/s. Current wind gust: " +str(self.Gust)+" m/s.")
+                    if device["Type"] == "Rain":
                         self.RainIDX=device["idx"]
-                        self.Rain=int(device["Rain"])
-                        Domoticz.Log("Found rain device '"+str(self.RainDevice)+"' current expected rain: "+str(self.Rain)+" mm.")
-                    if device["Name"]==self.PressureDevice:
+                        self.Rain=float(device["Rain"])
+                        Domoticz.Log("Found rain device '"+device["Name"]+"' current expected rain: "+str(self.Rain)+" mm.")
+                    if "Barometer" in device:
                         self.PressureIDX=device["idx"]
                         self.Pressure=float(device["Barometer"])
-                        Domoticz.Log("Found pressure device '"+str(self.PressureDevice)+"' current pressure: "+str(self.Pressure)+" hPa.")
+                        Domoticz.Log("Found pressure device '"+device["Name"]+"' current pressure: "+str(self.Pressure)+" hPa.")
                 try:
                     self.PressureIDX
                     if self.JustSun==False:
@@ -389,7 +379,8 @@ class BasePlugin:
                 q.put("Url to find all Ogimet stations is "+url)
             #Parse the table
             html = requests.get(url).content
-            df_list = pandas.read_html(html)
+            #Read the staioncode as string, not as number, to keep leading zero's
+            df_list = pandas.read_html(html, converters = {'WMO INDEX': str})
             mindist=1000
 
             q.put("Calculating which station is the closest.")
@@ -398,7 +389,7 @@ class BasePlugin:
             if latdegree < 0:
                 latdegree*=-1
 
-            for i, Latitude in enumerate(df_list[1][4]):
+            for i, Latitude in enumerate(df_list[1]['Latitude']):
                 if str(latdegree) in Latitude:
                     #Convert from DMS to decimal coordinates
                     degrees=Latitude.split("-")[0]
@@ -406,10 +397,11 @@ class BasePlugin:
                     lat = float(degrees) + float(minutes)/60
                     if self.Latitude <0:
                         lat*=-1
-                    degrees=df_list[1][5][i].split("-")[0]
-                    minutes=df_list[1][5][i].split("-")[1][:-1]
+                    degrees=df_list[1]['Longitude'][i].split("-")[0]
+                    minutes=df_list[1]['Longitude'][i].split("-")[1][:-1]
                     lon = float(degrees) + float(minutes)/60
                     if self.Longitude <0:
+
                         lon*=-1
                     #Calculate the distance
                     dist = haversine(self.Latitude, self.Longitude, lat, lon)
@@ -417,28 +409,28 @@ class BasePlugin:
                     #If it is the smallest distance so far
                     if dist<mindist:
                         #Check if station has data
-                        url="https://www.ogimet.com/cgi-bin/gsynres?lang=en&ind="+df_list[1][0][i]
+                        stationcode = str(df_list[1]['WMO INDEX'][i])
+                        url="https://www.ogimet.com/cgi-bin/gsynres?lang=en&ind="+stationcode
                         result=urlopen(url).read().decode('utf-8')
 
                         if not "No valid data found in database for " in result:
                             if self.Debug==True:
-                                q.put("Checking station "+str(df_list[1][0][i]))
+                                q.put("Checking station "+stationcode)
                                 
                             UTC=datetime.datetime.utcnow()
                             UTCtime=datetime.datetime.strftime(UTC+datetime.timedelta(hours=-2),'%Y%m%d%H')+"00"
-                            url="http://www.ogimet.com/cgi-bin/getsynop?block="+df_list[1][0][i]+"&begin="+UTCtime
-
+                            url="http://www.ogimet.com/cgi-bin/getsynop?block="+stationcode+"&begin="+UTCtime
                             result=requests.get(url)
                             if result.status_code == 200 and not "Status" in result.text and not "Max retries exceeded with url:"  in result.text:
                                 result=result.text
                                 if result == "":
                                     q.put("Empty result, url used is "+url)
                             else:
-                                q.put("No result for station "+df_list[1][0][i])
+                                q.put("No result for station "+df_list[1]['Name'][i])
                                 result =""
 
                             if result !="":
-                                result=result.split(" "+df_list[1][0][i]+" ")
+                                result=result.split(" "+stationcode+" ")
                                 Octa=result[1].split(" ")[1][0]
 
                                 if self.Debug==True:
@@ -446,10 +438,10 @@ class BasePlugin:
                                 if Octa != "/":
                                     #Use station
                                     mindist=dist
-                                    station=df_list[1][0][i]
-                                    stationname=df_list[1][2][i]
+                                    station=stationcode
+                                    stationname=df_list[1]['Name'][i]
                                 else:
-                                    stations+=[[dist,df_list[1][0][i],df_list[1][2][i]]]
+                                    stations+=[[dist,stationcode,df_list[1]['Name'][i]]]
 
 
             if station=="No station found." or mindist > 50:
