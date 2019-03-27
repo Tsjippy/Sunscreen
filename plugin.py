@@ -15,11 +15,18 @@
             <li>Calculates based on your settings if a sunscreen device needs to go open, needs to close, or half closed</li>
         </ul>
         <h3>Configuration</h3>
+        Fill in your domoticz ip.<br/>
+        Fill in your domoticz port.<br/>
         Fill in how often the sunscreen device should change.<br/>
-        Fill in your sun thresholds in this order: Azimut low;Azimut high; Altitude low; Altitude mid; Altidtude high<br/>
+        Fill in your azimut thresholds in this order: Azimut low;Azimut high.<br/>
+        Fill in your altitude thresholds in this order: Altitude low; Altitude mid; Altidtude high.<br/>
         If you need more sunscreens, just add 5 extra sun thresholds like this:<br/>
-        Azimut1 low;Azimut1 high; Altitude1 low; Altitude1 mid; Altidtude1 high;Azimut2 low;Azimut2 high; Altitude2 low; Altitude2 mid; Altidtude2 high<br/>
-        Fill in your weather thresholds in this order: Lux low; Lux high;Temp low (°C); Temp high (°C);Wind (m/s);Gust(m/s);Rain(mm)<br/>
+        Azimut1 low;Azimut1 high; Altitude1 low; Altitude1 mid.<br/>
+        Altidtude1 high;Azimut2 low;Azimut2 high; Altitude2 low; Altitude2 mid; Altidtude2 high.<br/>
+        Fill in your LUX thresholds in this order: Lux low; Lux high.<br/>
+        Fill in your temperature (°C) thresholds in this order: Temp low; Temp high.<br/>
+        Fill in your wind (m/s) thresholds in this order: Wind;Gust.<br/>
+        Fill in your rain (mm) threshold.<br/>
     </description>
     <params>
         <param field="Address"  label="Domoticz IP Address" width="200px" required="true" default="127.0.0.1"/>
@@ -30,7 +37,7 @@
         <param field="Mode3" label="LUX thresholds" width="1000px" default="60000;80000"/>
         <param field="Mode4" label="Temp thresholds" width="1000px" default="10;15"/>
         <param field="Mode5" label="Wind thresholds" width="1000px" default="10;15"/>
-        <param field="Username" label="Rain thresholds" width="200px" default="0"/>
+        <param field="Username" label="Rain threshold" width="200px" default="0"/>
         <param field="Mode6" label="Debug" width="100px">
             <options>
                 <option label="True" value="True" />
@@ -41,6 +48,9 @@
 </plugin>
 """
 
+#############################################################################
+#                      Imports                                              #
+#############################################################################
 try:
     import Domoticz
     debug = False
@@ -54,6 +64,10 @@ import calendar
 import requests
 from multiprocessing import Process, Queue
 import time
+
+#############################################################################
+#                      Sunscreen Class                                      #
+#############################################################################
 
 class Sunscreen:
     global _plugin
@@ -129,27 +143,30 @@ class Sunscreen:
         except Exception as e:
             senderror(e)
 
+#############################################################################
+#                      Baseplugin class                                     #
+#############################################################################
 class BasePlugin:
     enabled = False
     def __init__(self):
-        self.Error                      = False
-        self.ArbitraryTwilightLux       = 6.32     # W/m² egal 800 Lux     (the theoritical value is 4.74 but I have more accurate result with 6.32...)
-        self.ConstantSolarRadiation     = 1361 # Solar Constant W/m²
-        self.Year                       = datetime.datetime.now().year
-        self.Yearday                    = datetime.datetime.now().timetuple().tm_yday
-        self.AgularSpeed                = 360/365.25
-        self.Declinaison                = math.degrees(math.asin(0.3978 * math.sin(math.radians(self.AgularSpeed) *(self.Yearday - (81 - 2 * math.sin((math.radians(self.AgularSpeed) * (self.Yearday - 2))))))))
-        self.JustSun                    = False
-        self.Station                    = ""
-        self.Altitude                   = ""
-        self.Octa                       = 0
-        self.HeartbeatCount             = -1
-        self.Sunscreens                 = []
-        self.weightedLux                = 0
+        self.Error                              = False
+        self.ArbitraryTwilightLux               = 6.32     # W/m² egal 800 Lux     (the theoritical value is 4.74 but I have more accurate result with 6.32...)
+        self.ConstantSolarRadiation             = 1361 # Solar Constant W/m²
+        self.Year                               = datetime.datetime.now().year
+        self.Yearday                            = datetime.datetime.now().timetuple().tm_yday
+        self.AgularSpeed                        = 360/365.25
+        self.Declinaison                        = math.degrees(math.asin(0.3978 * math.sin(math.radians(self.AgularSpeed) *(self.Yearday - (81 - 2 * math.sin((math.radians(self.AgularSpeed) * (self.Yearday - 2))))))))
+        self.JustSun                            = False
+        self.Station                            = ""
+        self.Altitude                           = ""
+        self.Octa                               = 0
+        self.HeartbeatCount                     = -1
+        self.Sunscreens                         = []
+        self.weightedLux                        = 0
         if calendar.isleap(self.Year):
-            self.DaysInYear             = 366
+            self.DaysInYear                     = 366
         else:
-            self.DaysInYear             = 365
+            self.DaysInYear                     = 365
 
     def onStart(self):
         try:
@@ -158,82 +175,110 @@ class BasePlugin:
             if (os.name == 'nt'):
                 Domoticz.Error("Windows is currently not supported.")
 
+            #############################################################################
+            #                      Parameters                                           #
+            #############################################################################
             if Parameters["Mode6"]=="True":
-                self.Debug              = True
+                self.Debug                      = True
             else:
-                self.Debug              = False
+                self.Debug                      = False
 
             #Domoticz.Trace(True)
             if not "Location" in Settings:
                 self.Error="Location not set in Settings, please update your settings."
                 Domoticz.Error(self.Error)
             else:
-                loc = Settings["Location"].split(";")
-                self.Latitude=float(loc[0])
-                self.Longitude=float(loc[1])
+                loc                             = Settings["Location"].split(";")
+                self.Latitude                   = float(loc[0])
+                self.Longitude                  = float(loc[1])
                 Domoticz.Log("Current location is "+str(self.Latitude)+","+str(self.Longitude))
-                self.q1 = Queue()
-                self.p1 = Process(target=self.FindStation, args=(self.q1,))
-                self.p1.deamon=True
+                self.q1                         = Queue()
+                self.p1                         = Process(target=self.FindStation, args=(self.q1,))
+                self.p1.deamon                  = True
                 self.p1.start()
                 Domoticz.Log("Started search for Ogimet station.")
 
-                self.q2 = Queue()
-                self.p2 = Process(target=Altitude, args=(self.q2,))
-                self.p2.deamon=True
+                self.q2                         = Queue()
+                self.p2                         = Process(target=Altitude, args=(self.q2,))
+                self.p2.deamon                  = True
                 self.p2.start()
                 Domoticz.Log("Started search for Altitude.")
-
-                self.switchtime=int(Parameters["Mode1"])
-                self.Thresholds={}
-                SunThresholds=Parameters["Mode2"].split(";")
-                WeatherThresholds=Parameters["Mode3"].split(";")
 
                 self.Url = "http://"+Parameters["Address"]+":"+Parameters["Port"]
                 if self.Url == "":
                     self.Url="http://127.0.0.1:8080"
 
-                if SunThresholds==[""]:
-                    self.JustSun=True
-                    Domoticz.Status("No sun thresholds are given, so no sunscreen device will be created.")
+                self.SwitchTime                 = int(Parameters["Mode1"])
+                self.Thresholds                 = {}
+                AzimutThresholds                = Parameters["Mode2"].split(";")
+                AltitudeThresholds              = Parameters["Password"].split(";")
+                self.Thresholds["lux"]          = Parameters["Mode3"].split(";")
+                self.Thresholds["temp"]         = Parameters["Mode4"].split(";")
+                self.Thresholds["rain"]         = Parameters["Username"].split(";")
+
+                WindThresholds=Parameters["Mode5"].split(";")
+                if WindThresholds[0] != "":
+                    self.Thresholds["wind"]     = int(WindThresholds[0])
+                    try:
+                        self.Thresholds["gust"] = int(WindThresholds[1])
+                    except IndexError:
+                        self.Thresholds["gust"] = ""
                 else:
-                    self.NumberOfSunscreens=len(SunThresholds)/5
+                    self.Thresholds["wind"]     = ""
+                    self.Thresholds["gust"]     = ""
+
+                #############################################################################
+                #                      Parameter check                                      #
+                #############################################################################
+
+                if AzimutThresholds==[""]:
+                    self.JustSun=True
+                    Domoticz.Status("No azimut thresholds are given, so no sunscreen device will be created.")
+                elif AltitudeThresholds==[""]:
+                    self.JustSun=True
+                    Domoticz.Status("No altitude thresholds are given, so no sunscreen device will be created.")
+                else:
+                    self.NumberOfSunscreens=len(AzimutThresholds)/2
                     if self.NumberOfSunscreens.is_integer()==True:
                         self.NumberOfSunscreens=int(self.NumberOfSunscreens)
                         for i in range(self.NumberOfSunscreens):
-                            self.Thresholds["azimuth"+str(i)]=[SunThresholds[i],SunThresholds[i+1]]
-                            self.Thresholds["alltitude"+str(i)]=[SunThresholds[i+2],SunThresholds[i+3],SunThresholds[i+4]]
+                            self.Thresholds["azimuth"+str(i)]=[AzimutThresholds[i],AzimutThresholds[i+1]]
+                            self.Thresholds["alltitude"+str(i)]=[AltitudeThresholds[i],AltitudeThresholds[i+1],AltitudeThresholds[i+2]]
                     else:
                         self.JustSun=True
-                        Domoticz.Error("You specified "+str(len(SunThresholds))+" sun thresholds, you should specify 5 or a multitude of 5. No sunscreen device will be created, until you update the hardware.")
+                        Domoticz.Error("You specified "+str(len(SunThresholds))+" sun thresholds, you should specify 2 or a multitude of 2. No sunscreen device will be created, until you update the hardware.")
 
-                if WeatherThresholds!=[""] and self.JustSun==False:
-                    if len(WeatherThresholds) == 7:
-                        self.Thresholds["lux"]=[int(WeatherThresholds[0]),int(WeatherThresholds[1])]
-                        self.Thresholds["temp"]=[int(WeatherThresholds[2]),int(WeatherThresholds[3])]
-                        self.Thresholds["wind"]=int(WeatherThresholds[4])
-                        self.Thresholds["gust"]=int(WeatherThresholds[5])
-                        self.Thresholds["rain"]=int(WeatherThresholds[6])
-                    else:
+                if self.JustSun == False:
+                    if self.Thresholds["lux"][0] == "" or len(self.Thresholds["lux"]) != 2:
                         self.JustSun=True
-                        Domoticz.Error("You specified "+str(len(WeatherThresholds))+" thresholds, you should specify 7. No sunscreen device will be created, until you update the hardware.")
-                elif WeatherThresholds==[""] and self.JustSun==False:
-                    self.JustSun=True
-                    Domoticz.Status("No weather thresholds are given, so no sunscreen device will be created.")     
+                        Domoticz.Error("You did not specify lux thresholds. No sunscreen device will be created, until you update the hardware.")
+                    elif self.Thresholds["temp"][0] == "" or len(self.Thresholds["temp"]) != 2:
+                        self.JustSun=True
+                        Domoticz.Error("You did not specify temp thresholds. No sunscreen device will be created, until you update the hardware.")
+                    elif self.Thresholds["rain"][0] == "":
+                        self.JustSun=True
+                        Domoticz.Error("You did not specify a rain threshold. No sunscreen device will be created, until you update the hardware.")
+                    elif self.Thresholds["wind"] == "" or self.Thresholds["gust"] == "":
+                        self.JustSun=True
+                        Domoticz.Error("You did not specify wind thresholds. No sunscreen device will be created, until you update the hardware.")   
+
+                #############################################################################
+                #                      Initial checks                                       #
+                #############################################################################
 
                 self.CheckWeatherDevices()
 
                 createDevices()
                 
-                if self.JustSun==False:
-                    Domoticz.Log("Will only perform an action every "+str(self.switchtime)+" minutes.")
+                if self.JustSun == False:
+                    Domoticz.Log("Will only perform an action every "+str(self.SwitchTime)+" minutes.")
                     for i in range(self.NumberOfSunscreens):
                         Domoticz.Log("Will only close sunscreen"+str(Devices[i+5].Name)+" if the azimuth is between "+str(self.Thresholds["azimuth"+str(i)][0])+" and "+str(self.Thresholds["azimuth"+str(i)][1])+" degrees, the altitude is between "+str(self.Thresholds["alltitude"+str(i)][0])+" and "+str(self.Thresholds["alltitude"+str(i)][2])+" degrees, the temperature is above "+str(self.Thresholds["temp"][1])+" degrees and the amount of lux is between "+str(self.Thresholds["lux"][0])+" and "+str(self.Thresholds["lux"][1])+" lux")
                     Domoticz.Log("Will open a sunscreen if it is raining, the temperature drops below "+str(self.Thresholds["temp"][0])+" °C, the wind is more than "+str(self.Thresholds["wind"])+" m/s or the gust are more than "+str(self.Thresholds["gust"])+" m/s")
 
                 Domoticz.Log("On Start finished.")
         except Exception as e:
-            self.Error="Something went wrong during boot. Please chack the logs."
+            self.Error = "Something went wrong during boot. Please chack the logs."
             senderror(e)
 
     def onStop(self):
@@ -247,6 +292,7 @@ class BasePlugin:
 
         Domoticz.Log("Terminated running processes")
 
+    #Update the sunscreen device
     def onCommand(self, Unit, Command, Level, Hue):
         try:
             #Domoticz.Log("onCommand called for Unit " + str(Unit) + ": Parameter '" + str(Command) + "', Level: " + str(Level))
@@ -260,6 +306,7 @@ class BasePlugin:
         except Exception as e:
             senderror(e)
 
+    #Run every 30 seconds
     def onHeartbeat(self):
         try:
             if self.Error==False:
