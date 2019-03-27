@@ -296,7 +296,7 @@ class BasePlugin:
                     self.p_cloudlayer.start()
                     Domoticz.Log("Updating cloudlayer.")
 
-                    DeviceValues = requests.get(self.url+"/json.htm?type=devices").json()['result']
+                    DeviceValues = requests.get(self.Url+"/json.htm?type=devices").json()['result']
                     for Value in DeviceValues:
                         if Value["idx"] == self.TemperatureIDX:
                             self.Temperature=float(Value["Temp"])
@@ -344,9 +344,9 @@ class BasePlugin:
 
             if self.Error==False:
                 try:
-                    AllDevices = requests.get(url=self.url+"/json.htm?type=devices&used=true").json()['result']
+                    AllDevices = requests.get(url=self.Url+"/json.htm?type=devices&used=true").json()['result']
                 except Exception as e:
-                    Domoticz.Error("Could not get all devces with url: "+self.url+"/json.htm?type=devices&used=true")
+                    Domoticz.Error("Could not get all devces with url: "+self.Url+"/json.htm?type=devices&used=true")
                     senderror(e)
 
                 for device in AllDevices:
@@ -733,5 +733,3 @@ def UpdateDevice(Unit, nValue, sValue, AlwaysUpdate=False):
             if _plugin.Debug==True:
                 Domoticz.Log("Update " + Devices[Unit].Name + ": " + str(nValue) + " - '" + str(sValue) + "'")
     return
-
-
