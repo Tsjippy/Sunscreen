@@ -17,8 +17,7 @@ git clone https://github.com/Tsjippy/Sunscreen
 2) Install dependecies: 
 ```bash
 sudo pip3 install requests
-sudo pip3 install lxml
-sudo pip3 install pandas or sudo apt-get install python3-pandas
+sudo pip3 install pandas
 sudo apt-get install libatlas-base-dev
 ```
 3) Restart domoticz: 
