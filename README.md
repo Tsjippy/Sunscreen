@@ -42,3 +42,7 @@ Releases
 2018-12-18 (1.1.3): Fixes a problem resulting not being able to update the hardware, added a sunscreen override button.<br/>
 2019-01-02 (1.4.1): Ogimet url bug fix, it now uses leading zeros for month and day in the url.<br/>
 2019-02-15 (1.5.0): No longer a need to specify wheather devices.<br/>
+
+Donations
+----------
+If you want, you can thank me by donating via https://www.paypal.me/Tsjippy
