@@ -2,24 +2,29 @@
 # Author: Tsjippy
 #
 """
-<plugin key="SunScreen" name="Sunscreen plugin" author="Tsjippy" version="1.6.0" wikilink="http://www.domoticz.com/wiki/plugins/plugin.html" externallink="https://wiki.domoticz.com/wiki/Real-time_solar_data_without_any_hardware_sensor_:_azimuth,_Altitude,_Lux_sensor...">
+<plugin key="SunScreen" name="Sunscreen plugin" author="Tsjippy" version="1.6.0" wikilink="https://github.com/Tsjippy/Sunscreen" externallink="https://en.wikipedia.org/wiki/Horizontal_coordinate_system">
     <description>
         <h2>Sunscreen plugin</h2><br/>
         This plugin calculates the virtual amount of LUX on your current location<br/>
-        It turns on a sunscreen device based on that, based on which you perform actions<br/>
-        All credits go to the author of the original lus script (see link)<br/><br/>
+        It turns on a sunscreen device based on that, based on which you perform actions<br/><br/>
+
         <h3>Features</h3>
         <ul style="list-style-type:square">
             <li>Calculates the current sun location and stores them in Domoticz devices</li>
             <li>Calculates the virtual LUX and stores it in a Domoticz device</li>
             <li>Calculates based on your settings if a sunscreen device needs to go open, needs to close, or half closed</li>
+            <li>The sunscreen will go open if the wind, rain  comes above the optional set thresholds, or below the temperature threshold</li>
         </ul>
         <h3>Configuration</h3>
         Fill in your domoticz ip.<br/>
         Fill in your domoticz port.<br/>
         Fill in how often the sunscreen device should change.<br/>
         Fill in your azimut thresholds in this order: Azimut low;Azimut high.<br/>
-        Fill in your altitude thresholds in this order: Altitude low; Altitude mid; Altidtude high.<br/>
+        Fill in your altitude thresholds in this order: Altitude low; Altitude mid; Altitude high.<br/>
+        If you have no idea what to fill in into this fields, you can leave them empty. <br/>
+        An azimut and altitude device will be created. You can use those to note the degrees value when you want to have your sunscreen closed. <br/>
+        The sunscreen will be half closed if the altitude is between Altitude  mid and altitude high.<br/>
+        See for more indormation the external link above. <br/>
         If you need more sunscreens, just add 5 extra sun thresholds like this:<br/>
         Azimut1 low;Azimut1 high; Azimut2 low;Azimut2 high.<br/>
         Altitude1 low; Altitude1 mid; Altidtude1 high; Altitude2 low; Altitude2 mid; Altidtude2 high.<br/>
@@ -27,6 +32,7 @@
         Fill in your temperature (°C) thresholds in this order: Temp low; Temp high.<br/>
         Fill in your wind (m/s) thresholds in this order: Wind; Gust.<br/>
         Fill in your rain (mm) threshold.<br/>
+        Fill in your IDX values as found on the devices table in this order: Pressure device IDX;Temperature device IDX;Wind device IDX;Rain device IDX.<br/>
     </description>
     <params>
         <param field="Address"  label="Domoticz IP Address" width="200px" required="true" default="127.0.0.1"/>
@@ -38,12 +44,7 @@
         <param field="Mode4" label="Temp thresholds" width="100px" default="10;15"/>
         <param field="Mode5" label="Wind thresholds" width="100px" default="10;15"/>
         <param field="Username" label="Rain threshold" width="50px" default="0"/>
-        <param field="Mode6" label="Debug" width="100px">
-            <options>
-                <option label="True" value="True" />
-                <option label="False" value="False" default="False"/>
-            </options>
-        </param>
+        <param field="Mode6" label="Wheather devices IDX numbers" width="1000px" default="Pressure device IDX;Temperature device IDX;Wind device IDX;Rain device IDX"/>
     </params>
 </plugin>
 """
@@ -165,6 +166,15 @@ class BasePlugin:
         self.HeartbeatCount                     = -1
         self.Sunscreens                         = []
         self.weightedLux                        = 0
+        self.TemperatureIDX                     = 0
+        self.WindIDX                            = 0
+        self.RainIDX                            = 0
+        self.Wind                               = 0
+        self.Gust                               = 0
+        self.Temperature                        = 0
+        self.Rain                               = 0
+        self.Pressure                           = 0
+
         if calendar.isleap(self.Year):
             self.DaysInYear                     = 366
         else:
@@ -180,10 +190,7 @@ class BasePlugin:
             #############################################################################
             #                      Parameters                                           #
             #############################################################################
-            if Parameters["Mode6"]=="True":
-                self.Debug                      = True
-            else:
-                self.Debug                      = False
+            self.Debug                          = False
 
             #Domoticz.Trace(True)
             if not "Location" in Settings:
@@ -213,8 +220,8 @@ class BasePlugin:
                 try:
                     self.SwitchTime             = int(Parameters["Mode1"])
                 except ValueError:
-                    self.JustSun = True
-                    Domoticz.Error("Please specify a number for 'Switchtime' in the hardware settings. No sunscreen device will be created, until you update the hardware.")
+                    self.SwitchTime             = 30
+                    Domoticz.Error("Please specify a number for 'Switchtime' in the hardware settings. Now setting the default to 30 minutes.")
 
                 self.Thresholds                 = {}
                 AzimutThresholds                = Parameters["Mode2"].split(";")
@@ -231,8 +238,9 @@ class BasePlugin:
                     self.Thresholds["TempLow"]  = Parameters["Mode4"].split(";")[0]
                     self.Thresholds["TempHigh"] = Parameters["Mode4"].split(";")[1]
                 except IndexError:
-                    self.JustSun = True
-                    Domoticz.Error("Please specify two values for 'Temperature' in the hardware settings. No sunscreen device will be created, until you update the hardware.")
+                    Domoticz.Error("Please specify two values for 'Temperature' in the hardware settings.")
+                    self.Thresholds["TempLow"]  = 99
+                    self.Thresholds["TempHigh"] = 99
                 
                 self.Thresholds["Rain"]         = Parameters["Username"]
                 
@@ -240,15 +248,15 @@ class BasePlugin:
                 try:
                     self.Thresholds["Gust"]     = Parameters["Mode5"].split(";")[1]
                 except IndexError:
-                    self.JustSun = True
-                    Domoticz.Error("Please specify a number for 'Gust' in the hardware settings. No sunscreen device will be created, until you update the hardware.")
+                    Domoticz.Error("Please specify a value for 'Gust' in the hardware settings.")
+                    self.Thresholds["Gust"]     = 99
 
                 if AzimutThresholds==[""]:
                     self.JustSun=True
-                    Domoticz.Status("No azimut thresholds are given, so no sunscreen device will be created.")
+                    Domoticz.Status("No azimut thresholds are given. No sunscreen device will be created, until you update the hardware.")
                 elif AltitudeThresholds==[""]:
                     self.JustSun=True
-                    Domoticz.Status("No altitude thresholds are given, so no sunscreen device will be created.")
+                    Domoticz.Status("No altitude thresholds are given. No sunscreen device will be created, until you update the hardware.")
                 else:
                     self.NumberOfSunscreens=len(AzimutThresholds)/2
                     if self.NumberOfSunscreens.is_integer()==True:
@@ -275,13 +283,24 @@ class BasePlugin:
                 if self.JustSun == False:
                     for key, value in self.Thresholds.items():
                         try:
-                            value = float(value)
-                            if "High" in key and value < float(self.Thresholds[key.replace("High","Low")]):
-                                Domoticz.Error("The value of "+key + " is smaller then the value of " + key.replace("High","Low") + ". No sunscreen device will be created, until you update the hardware.")
-                                self.JustSun = True
+                            self.Thresholds[key] = float(value)
+                            if "High" in key and float(value) < float(self.Thresholds[key.replace("High","Low")]):
+                                Domoticz.Error("The value '" + value + "' of " + key + " is smaller then the value '" + str(self.Thresholds[key.replace("High","Low")]) + "' of " + key.replace("High","Low") + ".")
+                                self.Thresholds[key] = 99
+                                self.Thresholds[key.replace("High","Low")] = 99
                         except ValueError:
-                            Domoticz.Error("Please specify a number in stead of '" + value + "' for '" + key + "' in the hardware settings. No sunscreen device will be created, until you update the hardware.")
-                            self.JustSun = True
+                            if "Azimuth" in key or "Alltitude" in key:
+                                if value == "":
+                                    Domoticz.Error("Please specify a value for '" + key + "' in the hardware settings.")
+                                else:
+                                    Domoticz.Error("Please specify a number in stead of '" + value + "' for '" + key + "' in the hardware settings. No sunscreen device will be created, until you update the hardware.")
+                                self.JustSun = True
+                            else:
+                                if value == "":
+                                    Domoticz.Error("Please specify a value for '" + key + "' in the hardware settings.")
+                                else:
+                                    Domoticz.Error("Please specify a number in stead of '" + value + "' for '" + key + "' in the hardware settings.")
+                                self.Thresholds[key] = 99
 
 
                 #############################################################################
@@ -296,7 +315,7 @@ class BasePlugin:
                     Domoticz.Log("Will only perform an action every "+str(self.SwitchTime)+" minutes.")
                     for i in range(self.NumberOfSunscreens):
                         Domoticz.Log("Will only close sunscreen '"+str(Devices[i+6].Name)+"' if the azimuth is between "+str(self.Thresholds["AzimuthLow_"+str(i)])+" and "+str(self.Thresholds["AzimuthHigh_"+str(i)])+" degrees, the altitude is between "+str(self.Thresholds["AlltitudeLow_"+str(i)])+" and "+str(self.Thresholds["AlltitudeHigh_"+str(i)])+" degrees, the temperature is above "+str(self.Thresholds["TempHigh"])+"°C and the amount of lux is between "+str(self.Thresholds["LuxLow"])+" and "+str(self.Thresholds["LuxHigh"])+" lux.")
-                    Domoticz.Log("Will open a sunscreen if it is raining more then " + self.Thresholds["Rain"] + " mm, the temperature drops below "+str(self.Thresholds["TempLow"])+"°C, the wind is more than "+str(self.Thresholds["Wind"])+" m/s or the gust are more than "+str(self.Thresholds["Gust"])+" m/s.")
+                    Domoticz.Log("Will open a sunscreen if it is raining more then " + str(self.Thresholds["Rain"]) + " mm, the temperature drops below "+str(self.Thresholds["TempLow"])+"°C, the wind is more than "+str(self.Thresholds["Wind"])+" m/s or the gust are more than "+str(self.Thresholds["Gust"])+" m/s.")
 
                 Domoticz.Log("On Start finished.")
         except Exception as e:
@@ -363,7 +382,7 @@ class BasePlugin:
                     self.p_cloudlayer = Process(target=Cloudlayer, args=(self.q_cloudlayer,))
                     self.p_cloudlayer.deamon=True
                     self.p_cloudlayer.start()
-                    Domoticz.Log("Updating cloudlayer.")
+                    #Domoticz.Log("Updating cloudlayer.")
 
                     DeviceValues = requests.get(self.Url+"/json.htm?type=devices").json()['result']
                     for Value in DeviceValues:
@@ -408,44 +427,117 @@ class BasePlugin:
 
     def CheckWeatherDevices(self):
         try:
-            if self.Debug==True:
+            if self.Debug == True:
                 Domoticz.Log("Checking weather devices.")
 
-            if self.Error==False:
+            if self.Error == False:
                 try:
-                    AllDevices = requests.get(url=self.Url+"/json.htm?type=devices&used=true").json()['result']
+                    self.AllDevices = requests.get(self.Url+"/json.htm?type=devices&used=true").json()['result']
                 except Exception as e:
-                    Domoticz.Error("Could not get all devces with url: "+self.Url+"/json.htm?type=devices&used=true")
+                    self.Error = "Could not get all devces with url: "+self.Url+"/json.htm?type=devices&used=true"
+                    Domoticz.Error(self.Error)
                     senderror(e)
 
-                for device in AllDevices:
-                    if "Temp" in device:
-                        self.TemperatureIDX=device["idx"]
-                        self.Temperature=float(device["Temp"])
-                        Domoticz.Log("Found temperature device '"+device["Name"]+ "' Current temperature: "+str(self.Temperature)+" °C.")
-                    if device["Type"] == "Wind":
-                        self.WindIDX=device["idx"]
-                        self.Wind=float(device["Speed"])
-                        self.Gust=float(device["Gust"])
-                        Domoticz.Log("Found wind device '"+device["Name"]+"' current wind: "+str(self.Wind)+" m/s. Current wind gust: " +str(self.Gust)+" m/s.")
-                    if device["Type"] == "Rain":
-                        self.RainIDX=device["idx"]
-                        self.Rain=float(device["Rain"])
-                        Domoticz.Log("Found rain device '"+device["Name"]+"' current expected rain: "+str(self.Rain)+" mm.")
-                    if "Barometer" in device:
-                        self.PressureIDX=device["idx"]
-                        self.Pressure=float(device["Barometer"])
-                        Domoticz.Log("Found pressure device '"+device["Name"]+"' current pressure: "+str(self.Pressure)+" hPa.")
+            if self.Error == False:
+                #Check if devices are valid.
+                #Barometer
                 try:
-                    self.PressureIDX
-                    if self.JustSun==False:
-                        self.TemperatureIDX
-                        self.WindIDX
-                        self.RainIDX
-                except AttributeError as Error:
-                    device=str(Error).split("'")[3].replace("IDX","")
-                    self.Error="Could not find "+getattr(self, device+"Device",device)+" device, please make sure it exists."
-                    Domoticz.Error(self.Error)
+                    self.PressureIDX            = int(Parameters["Mode6"].split(";")[0])
+                    DeviceDetails = [x for x in self.AllDevices if x["idx"] == str(self.PressureIDX)][0]
+                    if DeviceDetails["SubType"] != 'Barometer':
+                        Domoticz.Error("You did specify a " + DeviceDetails["SubType"] + " device but it should be a pressure device, containing a Barometer field.")
+                        self.PressureIDX        = 0
+                except IndexError:
+                    Domoticz.Status("No 'Pressure device' specified, going to find it myself.")
+                    self.PressureIDX            = 0
+                except ValueError:
+                    Domoticz.Error("'" + str(Parameters["Mode6"].split(";")[0]) + "' is not a valid number for the presure idx, please specify a valid number. Will try to find one myselfe now.")
+                    self.PressureIDX            = 0
+
+                #Wind
+                try:
+                    self.WindIDX                = int(Parameters["Mode6"].split(";")[1])
+                    DeviceDetails = [x for x in self.AllDevices if x["idx"] == str(self.WindIDX)][0]
+                    if DeviceDetails["Type"] != 'Wind':
+                        Domoticz.Error("You did specify a " + DeviceDetails["Type"] + " device but it should be a wind device.")
+                        self.WindIDX            = 0
+                except IndexError:
+                    Domoticz.Status("No 'Wind device' specified, going to find it myself.")
+                    self.WindIDX                = 0
+                except ValueError:
+                    Domoticz.Error("'" + str(Parameters["Mode6"].split(";")[1]) + "' is not a valid number for the wind device idx, please specify a valid number. Will try to find one myselfe now.")
+                    self.WindIDX                = 0
+
+                #Temperature
+                try:
+                    self.TemperatureIDX         = int(Parameters["Mode6"].split(";")[2])
+                    DeviceDetails = [x for x in self.AllDevices if x["idx"] == str(self.TemperatureIDX)][0]["Temp"]
+                except IndexError:
+                    Domoticz.Status("No 'Temperature device' specified, going to find it myself.")
+                    self.TemperatureIDX         = 0
+                except ValueError:
+                    Domoticz.Error("'" + str(Parameters["Mode6"].split(";")[2]) + "' is not a valid number for the temperature device idx, please specify a valid number. Will try to find one myselfe now.")
+                    self.TemperatureIDX         = 0
+                except KeyError:
+                    Domoticz.Error("You did specify a " + DeviceDetails["Type"] + " but it should be a temperature device.")
+                    self.TemperatureIDX         = 0
+
+                #Rain
+                try:
+                    self.RainIDX                = int(Parameters["Mode6"].split(";")[3])
+                    DeviceDetails = [x for x in self.AllDevices if x["idx"] == str(self.RainIDX)][0]
+                    if DeviceDetails["Type"] != 'Rain':
+                        Domoticz.Error("You did specify a " + DeviceDetails["Type"] + " device but it should be a rain device.")
+                        self.RainIDX            = 0
+                except IndexError:
+                    Domoticz.Status("No 'Rain device' specified, going to find it myself.")
+                    self.RainIDX                = 0
+                except ValueError:
+                    Domoticz.Error("'" + str(Parameters["Mode6"].split(";")[3]) + "' is not a valid number for the rain idx, please specify a valid number. Will try to find one myselfe now.")
+                    self.RainIDX                = 0
+
+                #Loop through all devices to find missing devices
+                for device in self.AllDevices:
+                    if "Temp" in device and self.TemperatureIDX == 0:
+                        self.TemperatureIDX = device["idx"]
+                        Domoticz.Status("Found temperature device '" + device["Name"] + "'")
+                    if device["Type"] == "Wind" and self.WindIDX == 0:
+                        self.WindIDX        = device["idx"]
+                        Domoticz.Status("Found wind device '" + device["Name"] + "'")
+                    elif device["Type"] == "Rain" and self.RainIDX == 0:
+                        self.RainIDX        = device["idx"]
+                        Domoticz.Status("Found rain device '"+device["Name"] + "'")
+                    elif "Barometer" in device and self.PressureIDX == 0:
+                        self.PressureIDX    = device["idx"]
+                        Domoticz.Status("Found pressure device '" + device["Name"] + "'")
+
+                    if str(self.TemperatureIDX) == device["idx"]:
+                        self.Temperature    = float(device["Temp"])
+                        Domoticz.Log("Using " + device["Name"]+" to get the temperature. Current temperature: " + str(self.Temperature) + "°C.")
+
+                    if str(self.WindIDX) == device["idx"]:
+                        self.Wind           = float(device["Speed"])
+                        self.Gust           = float(device["Gust"])
+                        Domoticz.Log("Using " + device["Name"] + " to get the windspeed and wind gusts. Current wind: " + str(self.Wind) + " m/s. Current wind gust: " + str(self.Gust) + " m/s.")
+                    elif str(self.RainIDX) == device["idx"]:
+                        self.Rain           = float(device["Rain"])
+                        Domoticz.Log("Using " + device["Name"] + " to get the rain. Current expected rain: " + str(self.Rain) + " mm.")
+                    elif str(self.PressureIDX) == device["idx"]:
+                        self.Pressure       = float(device["Barometer"])
+                        Domoticz.Log("Using " + device["Name"] +" to get the presure. Current pressure: " + str(self.Pressure) + " hPa.")
+                
+                if self.PressureIDX == 0:
+                    Domoticz.Error("Please make sure you have a Pressure device available. This plugin cannot function without it.")
+                    self.Error = "No pressure device found."
+
+                if self.JustSun == False:
+                    if self.TemperatureIDX == 0:
+                        Domoticz.Error( "Could not find a temperature device, please make sure it exists, I will ignore the temperature thresholds untill then.")
+                    if self.WindIDX == 0:
+                        Domoticz.Error( "Could not find a wind device, please make sure it exists, I will ignore the wind thresholds untill then.")
+                    if self.RainIDX == 0:
+                        Domoticz.Error( "Could not find a rain device, please make sure it exists, I will ignore the rain threshold untill then.")
+                    
         except Exception as e:
             senderror(e)
 
