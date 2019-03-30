@@ -191,7 +191,6 @@ class BasePlugin:
             #                      Parameters                                           #
             #############################################################################
             self.Debug                          = False
-
             #Domoticz.Trace(True)
             if not "Location" in Settings:
                 self.Error="Location not set in Settings, please update your settings."
@@ -451,7 +450,10 @@ class BasePlugin:
                     Domoticz.Status("No 'Pressure device' specified, going to find it myself.")
                     self.PressureIDX            = 0
                 except ValueError:
-                    Domoticz.Error("'" + str(Parameters["Mode6"].split(";")[0]) + "' is not a valid number for the presure idx, please specify a valid number. Will try to find one myselfe now.")
+                    if str(Parameters["Mode6"].split(";")[0]) == "":
+                        Domoticz.Status("You did not specify a pressure device idx. Will try to find a device myself now.")
+                    else:
+                        Domoticz.Error("'" + str(Parameters["Mode6"].split(";")[0]) + "' is not a valid number for the presure idx, please specify a valid number. Will try to find one myself now.")
                     self.PressureIDX            = 0
 
                 #Wind
@@ -465,7 +467,10 @@ class BasePlugin:
                     Domoticz.Status("No 'Wind device' specified, going to find it myself.")
                     self.WindIDX                = 0
                 except ValueError:
-                    Domoticz.Error("'" + str(Parameters["Mode6"].split(";")[1]) + "' is not a valid number for the wind device idx, please specify a valid number. Will try to find one myselfe now.")
+                    if str(Parameters["Mode6"].split(";")[1]) == "":
+                        Domoticz.Status("You did not specify a wind device idx. Will try to find a device myself now.")
+                    else:
+                        Domoticz.Error("'" + str(Parameters["Mode6"].split(";")[1]) + "' is not a valid number for the wind device idx, please specify a valid number. Will try to find one myself now.")
                     self.WindIDX                = 0
 
                 #Temperature
@@ -476,7 +481,10 @@ class BasePlugin:
                     Domoticz.Status("No 'Temperature device' specified, going to find it myself.")
                     self.TemperatureIDX         = 0
                 except ValueError:
-                    Domoticz.Error("'" + str(Parameters["Mode6"].split(";")[2]) + "' is not a valid number for the temperature device idx, please specify a valid number. Will try to find one myselfe now.")
+                    if str(Parameters["Mode6"].split(";")[2]) == "":
+                        Domoticz.Status("You did not specify a temperature device idx. Will try to find a device myself now.")
+                    else:
+                        Domoticz.Error("'" + str(Parameters["Mode6"].split(";")[2]) + "' is not a valid number for the temperature device idx, please specify a valid number. Will try to find one myself now.")
                     self.TemperatureIDX         = 0
                 except KeyError:
                     Domoticz.Error("You did specify a " + DeviceDetails["Type"] + " but it should be a temperature device.")
@@ -493,7 +501,10 @@ class BasePlugin:
                     Domoticz.Status("No 'Rain device' specified, going to find it myself.")
                     self.RainIDX                = 0
                 except ValueError:
-                    Domoticz.Error("'" + str(Parameters["Mode6"].split(";")[3]) + "' is not a valid number for the rain idx, please specify a valid number. Will try to find one myselfe now.")
+                    if str(Parameters["Mode6"].split(";")[3]) == "":
+                        Domoticz.Status("You did not specify a rain device idx. Will try to find a device myself now.")
+                    else:
+                        Domoticz.Error("'" + str(Parameters["Mode6"].split(";")[3]) + "' is not a valid number for the rain idx, please specify a valid number. Will try to find one myself now.")
                     self.RainIDX                = 0
 
                 #Loop through all devices to find missing devices
