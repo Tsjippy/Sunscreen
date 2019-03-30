@@ -316,7 +316,8 @@ class BasePlugin:
                         Domoticz.Log("Will only close sunscreen '"+str(Devices[i+6].Name)+"' if the azimuth is between "+str(self.Thresholds["AzimuthLow_"+str(i)])+" and "+str(self.Thresholds["AzimuthHigh_"+str(i)])+" degrees, the altitude is between "+str(self.Thresholds["AlltitudeLow_"+str(i)])+" and "+str(self.Thresholds["AlltitudeHigh_"+str(i)])+" degrees, the temperature is above "+str(self.Thresholds["TempHigh"])+"°C and the amount of lux is between "+str(self.Thresholds["LuxLow"])+" and "+str(self.Thresholds["LuxHigh"])+" lux.")
                     Domoticz.Log("Will open a sunscreen if it is raining more then " + str(self.Thresholds["Rain"]) + " mm, the temperature drops below "+str(self.Thresholds["TempLow"])+"°C, the wind is more than "+str(self.Thresholds["Wind"])+" m/s or the gust are more than "+str(self.Thresholds["Gust"])+" m/s.")
 
-                Domoticz.Log("On Start finished.")
+                if self.Debug == True:
+                    Domoticz.Log("On Start finished.")
         except Exception as e:
             senderror(e)
             self.Error = "Something went wrong during boot. Please check the logs."
@@ -565,9 +566,12 @@ class BasePlugin:
             q.put('Error on line {}'.format(sys.exc_info()[-1].tb_lineno)+" Error is: " +str(e))
 
         try:
-            q.put("Importing pandas")
+            if self.Debug == True:
+                q.put("Importing pandas")
             import pandas
-            q.put("Importing pandas done")
+
+            if self.Debug == True:
+                q.put("Importing pandas done")
 
             #Find Ogimet station
             stations=[]
@@ -577,7 +581,9 @@ class BasePlugin:
             #Parse the table
             html = requests.get(url).content
             #Read the staioncode as string, not as number, to keep leading zero's
-            q.put("Processing html table.")
+            if self.Debug == True:
+                q.put("Processing html table.")
+                
             df_list = pandas.read_html(html, converters = {'WMO INDEX': str})
             mindist=1000
 
