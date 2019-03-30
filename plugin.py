@@ -40,7 +40,7 @@
         <param field="Mode1" label="Switchtime threshold (minutes)" width="100px" required="true" default="30"/>
         <param field="Mode2" label="Azimut thresholds" width="500px" default="Azimut low;Azimut high"/>
         <param field="Password" label="Altitude thresholds" default="Altitude low; Altitude mid; Altidtude high" width="500px"/>
-        <param field="Mode3" label="LUX thresholds" width="100px" default="60000;80000"/>
+        <param field="Mode3" label="LUX thresholds" width="500px" default="60000;80000"/>
         <param field="Mode4" label="Temp thresholds" width="100px" default="10;15"/>
         <param field="Mode5" label="Wind thresholds" width="100px" default="10;15"/>
         <param field="Username" label="Rain threshold" width="50px" default="0"/>
@@ -66,20 +66,21 @@ import requests
 from multiprocessing import Process, Queue
 import time
 
-
 #############################################################################
 #                      Sunscreen Class                                      #
 #############################################################################
 
 class Sunscreen:
     global _plugin
-    def __init__(self,DeviceID,AzimutLow,AzimutHigh,AltitudeLow,AlltitudeMid,AlltitudeHigh):
+    def __init__(self,DeviceID,AzimutLow,AzimutHigh,AltitudeLow,AlltitudeMid,AlltitudeHigh,LuxLow,LuxHigh):
         self.DeviceID = DeviceID
         self.AzimutLow = AzimutLow
         self.AzimutHigh = AzimutHigh
         self.AltitudeLow = AltitudeLow
         self.AlltitudeMid = AlltitudeMid
         self.AlltitudeHigh = AlltitudeHigh
+        self.LuxLow = LuxLow
+        self.LuxHigh = LuxHigh
 
     def CheckClose(self):
         try:
@@ -91,7 +92,7 @@ class Sunscreen:
                 elif _plugin.Rain > _plugin.Thresholds["Rain"]:
                     Domoticz.Status("Opening '"+Devices[self.DeviceID].Name+"' because of the rain.("+str(_plugin.Rain)+" mm).")
                     ShouldOpen = True
-                elif _plugin.weightedLux < _plugin.Thresholds["LuxLow"]:
+                elif _plugin.weightedLux < self.LuxLow:
                     Domoticz.Status("Opening '"+Devices[self.DeviceID].Name+"' because of the light intensity. ("+str(round(_plugin.weightedLux))+" lux).")
                     ShouldOpen = True
 
@@ -118,7 +119,7 @@ class Sunscreen:
                     if _plugin.Wind <= _plugin.Thresholds["wind"]:
                         if _plugin.Gust <= _plugin.Thresholds["gust"]:
                             if _plugin.Rain <= _plugin.Thresholds["rain"]:
-                                if _plugin.weightedLux > _plugin.Thresholds["LuxHigh"] or _plugin.Temperature > _plugin.Thresholds["TempHigh"]:
+                                if _plugin.weightedLux > self.LuxHigh or _plugin.Temperature > _plugin.Thresholds["TempHigh"]:
                                     #--------------------   Close sunscreen   -------------------- 
                                     if _plugin.sunAltitude > self.AlltitudeMid and Devices[self.DeviceID].sValue != 50:
                                         Domoticz.Log ("Half closing '"+Devices[self.DeviceID].Name+"'.")
@@ -225,13 +226,7 @@ class BasePlugin:
                 self.Thresholds                 = {}
                 AzimutThresholds                = Parameters["Mode2"].split(";")
                 AltitudeThresholds              = Parameters["Password"].split(";")
-                
-                try:
-                    self.Thresholds["LuxLow"]   = int(Parameters["Mode3"].split(";")[0])
-                    self.Thresholds["LuxHigh"]  = int(Parameters["Mode3"].split(";")[1])
-                except IndexError:
-                    self.JustSun = True
-                    Domoticz.Error("Please specify two values for 'Lux' in the hardware settings. No sunscreen device will be created, until you update the hardware.")
+                LuxThresholds                   = Parameters["Mode3"].split(";")
                 
                 try:
                     self.Thresholds["TempLow"]  = Parameters["Mode4"].split(";")[0]
@@ -262,23 +257,38 @@ class BasePlugin:
                         self.NumberOfSunscreens=int(self.NumberOfSunscreens)
                         for i in range(self.NumberOfSunscreens):
                             try:
-                                self.Thresholds["AzimuthLow_"+str(i)] = AzimutThresholds[i]
-                                self.Thresholds["AzimuthHigh_"+str(i)] = AzimutThresholds[i+1]
+                                self.Thresholds["AzimuthLow_"+str(i)] = AzimutThresholds[i*2]
+                                self.Thresholds["AzimuthHigh_"+str(i)] = AzimutThresholds[i*2+1]
                             except IndexError:
                                 self.JustSun = True
-                                Domoticz.Error("Please specify two values for 'Azimuth' in the hardware settings. No sunscreen device will be created, until you update the hardware.")
+                                Domoticz.Error("Please specify 2, or a multitude of 2 values for 'Azimuth' in the hardware settings. No sunscreen device will be created, until you update the hardware.")
                             
                             try:
-                                self.Thresholds["AlltitudeLow_"+str(i)] = AltitudeThresholds[i]
-                                self.Thresholds["AlltitudeMid_"+str(i)] = AltitudeThresholds[i+1]
-                                self.Thresholds["AlltitudeHigh_"+str(i)] = AltitudeThresholds[i+2]
+                                self.Thresholds["AlltitudeLow_"+str(i)] = AltitudeThresholds[i*2]
+                                self.Thresholds["AlltitudeMid_"+str(i)] = AltitudeThresholds[i*2+1]
+                                self.Thresholds["AlltitudeHigh_"+str(i)] = AltitudeThresholds[i*2+2]
                             except IndexError:
-                                self.JustSun = True
-                                Domoticz.Error("Please specify three values for 'Alltitude' in the hardware settings. No sunscreen device will be created, until you update the hardware.")
-                    else:
-                        self.JustSun=True
-                        Domoticz.Status("You specified "+str(len(SunThresholds))+" sun thresholds, you should specify 2 or a multitude of 2. No sunscreen device will be created, until you update the hardware.")
-
+                                if len(AltitudeThresholds) == 3 and i > 0:
+                                    Domoticz.Status("You specified multiple azimuth values, but only 3 altitude values. I will reuse these three for all other sunscreens.")
+                                    self.Thresholds["AlltitudeLow_"+str(i)] = AltitudeThresholds[0]
+                                    self.Thresholds["AlltitudeMid_"+str(i)] = AltitudeThresholds[1]
+                                    self.Thresholds["AlltitudeHigh_"+str(i)] = AltitudeThresholds[2]
+                                else:
+                                    self.JustSun = True
+                                    Domoticz.Status("Please specify 3 or a multitude of 3 values for 'Alltitude' in the hardware settings. No sunscreen device will be created, until you update the hardware.")
+                            
+                            try:
+                                self.Thresholds["LuxLow_"+str(i)]   = int(LuxThresholds[i*2])
+                                self.Thresholds["LuxHigh_"+str(i)]  = int(LuxThresholds[i*2+1])
+                            except IndexError:
+                                if len(LuxThresholds) == 2 and i > 0:
+                                    Domoticz.Status("You specified multiple azimuth values, but only 2 Lux values. I will reuse these 2 for all other sunscreens.")
+                                    self.Thresholds["LuxLow_"+str(i)]   = int(LuxThresholds[0])
+                                    self.Thresholds["LuxHigh_"+str(i)]  = int(LuxThresholds[1])
+                                else:
+                                    self.JustSun = True
+                                    Domoticz.Status("Please specify 2 or a multitude of 2 values for 'Lux' in the hardware settings. No sunscreen device will be created, until you update the hardware.")
+                
                 if self.JustSun == False:
                     for key, value in self.Thresholds.items():
                         try:
@@ -313,8 +323,8 @@ class BasePlugin:
                 if self.JustSun == False:
                     Domoticz.Log("Will only perform an action every "+str(self.SwitchTime)+" minutes.")
                     for i in range(self.NumberOfSunscreens):
-                        Domoticz.Log("Will only close sunscreen '"+str(Devices[i+6].Name)+"' if the azimuth is between "+str(self.Thresholds["AzimuthLow_"+str(i)])+" and "+str(self.Thresholds["AzimuthHigh_"+str(i)])+" degrees, the altitude is between "+str(self.Thresholds["AlltitudeLow_"+str(i)])+" and "+str(self.Thresholds["AlltitudeHigh_"+str(i)])+" degrees, the temperature is above "+str(self.Thresholds["TempHigh"])+"°C and the amount of lux is between "+str(self.Thresholds["LuxLow"])+" and "+str(self.Thresholds["LuxHigh"])+" lux.")
-                    Domoticz.Log("Will open a sunscreen if it is raining more then " + str(self.Thresholds["Rain"]) + " mm, the temperature drops below "+str(self.Thresholds["TempLow"])+"°C, the wind is more than "+str(self.Thresholds["Wind"])+" m/s or the gust are more than "+str(self.Thresholds["Gust"])+" m/s.")
+                        Domoticz.Log("Will only close sunscreen '"+str(Devices[i+6].Name)+"' if the azimuth is between "+str(self.Thresholds["AzimuthLow_"+str(i)])+" and "+str(self.Thresholds["AzimuthHigh_"+str(i)])+" degrees, the altitude is between "+str(self.Thresholds["AlltitudeLow_"+str(i)])+" and "+str(self.Thresholds["AlltitudeHigh_"+str(i)])+" degrees, the temperature is above "+str(self.Thresholds["TempHigh"])+"°C and the amount of lux is above "+str(self.Thresholds["LuxHigh_"+str(i)])+" lux.")
+                        Domoticz.Log("Will open sunscreen '"+str(Devices[i+6].Name)+"' if the sun is not in the region, it is raining more then " + str(self.Thresholds["Rain"]) + " mm, the temperature drops below "+str(self.Thresholds["TempLow"])+"°C, the wind is more than "+str(self.Thresholds["Wind"])+" m/s, the wind gusts are more than "+str(self.Thresholds["Gust"])+" m/s or the amount of lux is less than "+str(self.Thresholds["LuxLow_"+str(i)])+" lux")
 
                 if self.Debug == True:
                     Domoticz.Log("On Start finished.")
@@ -323,15 +333,19 @@ class BasePlugin:
             self.Error = "Something went wrong during boot. Please check the logs."
 
     def onStop(self):
-        Domoticz.Log("onStop called")
-
         try:
-            self.p1.terminate()
-            self.p2.terminate()
+            if hasattr(self,"p1"):
+                self.p1.terminate()
+
+            if hasattr(self,"p2"):
+                self.p2.terminate()
+
+            if hasattr(self,"p_cloudlayer"):
+                self.p_cloudlayer.terminate()
         except Exception as e:
             senderror(e)
 
-        Domoticz.Log("Terminated running processes")
+        Domoticz.Status("Terminated running processes")
 
     #Update the sunscreen device
     def onCommand(self, Unit, Command, Level, Hue):
@@ -525,18 +539,18 @@ class BasePlugin:
 
                     if str(self.TemperatureIDX) == device["idx"]:
                         self.Temperature    = float(device["Temp"])
-                        Domoticz.Log("Using " + device["Name"]+" to get the temperature. Current temperature: " + str(self.Temperature) + "°C.")
+                        Domoticz.Log("Using '" + device["Name"]+"' to get the temperature. Current temperature: " + str(self.Temperature) + "°C.")
 
                     if str(self.WindIDX) == device["idx"]:
                         self.Wind           = float(device["Speed"])
                         self.Gust           = float(device["Gust"])
-                        Domoticz.Log("Using " + device["Name"] + " to get the windspeed and wind gusts. Current wind: " + str(self.Wind) + " m/s. Current wind gust: " + str(self.Gust) + " m/s.")
+                        Domoticz.Log("Using '" + device["Name"] + "' to get the windspeed and wind gusts. Current wind: " + str(self.Wind) + " m/s. Current wind gust: " + str(self.Gust) + " m/s.")
                     elif str(self.RainIDX) == device["idx"]:
                         self.Rain           = float(device["Rain"])
-                        Domoticz.Log("Using " + device["Name"] + " to get the rain. Current expected rain: " + str(self.Rain) + " mm.")
+                        Domoticz.Log("Using '" + device["Name"] + "' to get the rain. Current expected rain: " + str(self.Rain) + " mm.")
                     elif str(self.PressureIDX) == device["idx"]:
                         self.Pressure       = float(device["Barometer"])
-                        Domoticz.Log("Using " + device["Name"] +" to get the presure. Current pressure: " + str(self.Pressure) + " hPa.")
+                        Domoticz.Log("Using '" + device["Name"] +"' to get the presure. Current pressure: " + str(self.Pressure) + " hPa.")
                 
                 if self.PressureIDX == 0:
                     Domoticz.Error("Please make sure you have a Pressure device available. This plugin cannot function without it.")
@@ -583,7 +597,7 @@ class BasePlugin:
             #Read the staioncode as string, not as number, to keep leading zero's
             if self.Debug == True:
                 q.put("Processing html table.")
-                
+
             df_list = pandas.read_html(html, converters = {'WMO INDEX': str})
             mindist=1000
 
@@ -890,7 +904,7 @@ def createDevices():
                     Domoticz.Log("Created 'Sunscreen"+str(i)+"' device")
                     Domoticz.Device(Name="Sunscreen"+str(i), Unit=x, TypeName="Switch", Switchtype=13, Used=1).Create()
 
-                _plugin.Sunscreens.append(Sunscreen(x,_plugin.Thresholds["AzimuthLow_"+str(i)],_plugin.Thresholds["AzimuthHigh_"+str(i)],_plugin.Thresholds["AlltitudeLow_"+str(i)],_plugin.Thresholds["AlltitudeMid_"+str(i)],_plugin.Thresholds["AlltitudeHigh_"+str(i)]))
+                _plugin.Sunscreens.append(Sunscreen(x,_plugin.Thresholds["AzimuthLow_"+str(i)],_plugin.Thresholds["AzimuthHigh_"+str(i)],_plugin.Thresholds["AlltitudeLow_"+str(i)],_plugin.Thresholds["AlltitudeMid_"+str(i)],_plugin.Thresholds["AlltitudeHigh_"+str(i)],_plugin.Thresholds["LuxLow_"+str(i)],_plugin.Thresholds["LuxHigh_"+str(i)]))
     except Exception as e:
         senderror(e)
 
