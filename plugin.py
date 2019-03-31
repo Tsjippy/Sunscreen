@@ -90,6 +90,7 @@ class Sunscreen:
         try:
             # If screen is down, check if it needs to go up due to the wheater
             if Devices[self.DeviceID].sValue!="Off":
+                ShouldOpen = False
                 if _plugin.Wind > _plugin.Thresholds["Wind"] or _plugin.Gust > _plugin.Thresholds["Gust"]:
                     Domoticz.Status("Opening '"+Devices[self.DeviceID].Name+"' because of the wind. ("+str(_plugin.Wind)+" m/s).")
                     ShouldOpen = True
