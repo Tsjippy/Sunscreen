@@ -125,7 +125,7 @@ class Sunscreen:
             if LastChanged > _plugin.SwitchTime:
                 #Only close sunscreen if the sun is in a specific region
                 if _plugin.Azimuth > self.AzimutLow and _plugin.Azimuth < self.AzimutHigh and _plugin.sunAltitude > self.AltitudeLow and _plugin.sunAltitude < self.AlltitudeHigh:
-                    if self.Debug == True:
+                    if _plugin.Debug == True:
                         Domoticz.Log("Sun is in region")
                     #Only close if weather is ok
                     if _plugin.Wind <= _plugin.Thresholds["Wind"]:
@@ -156,7 +156,7 @@ class Sunscreen:
                 else:
                     Domoticz.Log("No need to close the '"+Devices[self.DeviceID].Name+"'.")
             else:
-                Domoticz.Log("Last change was less than "+_plugin.SwitchTime+" minutes ago, no action will be performed.")
+                Domoticz.Log("Last change was less than " + str(_plugin.SwitchTime) + " minutes ago, no action will be performed.")
         except Exception as e:
             senderror(e)
 
