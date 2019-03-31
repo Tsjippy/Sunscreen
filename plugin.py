@@ -229,7 +229,7 @@ class BasePlugin:
                     self.Station                = ""
 
                 if self.Station == "":
-                    Domoticz.Station("You did not specify a valid Ogimet station id, will try to find one myself now.")
+                    Domoticz.Status("You did not specify a valid Ogimet station id, will try to find one myself now.")
                     self.q1                         = Queue()
                     self.p1                         = Process(target=self.FindStation, args=(self.q1,))
                     self.p1.deamon                  = True
