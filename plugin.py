@@ -2,7 +2,7 @@
 # Author: Tsjippy
 #
 """
-<plugin key="SunScreen" name="Sunscreen plugin" author="Tsjippy" version="1.6.1" wikilink="https://github.com/Tsjippy/Sunscreen" externallink="https://en.wikipedia.org/wiki/Horizontal_coordinate_system">
+<plugin key="SunScreen" name="Sunscreen plugin" author="Tsjippy" version="1.7.0" wikilink="https://github.com/Tsjippy/Sunscreen" externallink="https://en.wikipedia.org/wiki/Horizontal_coordinate_system">
     <description>
         <h2>Sunscreen plugin</h2><br/>
         This plugin calculates the virtual amount of LUX on your current location<br/>
@@ -16,15 +16,15 @@
             <li>The sunscreen will go open if the wind, rain  comes above the optional set thresholds, or below the temperature threshold</li>
         </ul>
         <h3>Configuration</h3>
-        Fill in your domoticz ip.<br/>
-        Fill in your domoticz port.<br/>
+        You can just add the hardware, no values are required.<br/>
+        But a sunscreen device will only be added if at least the azimuth and altitude thresholds are filled in. <br/>
+        To find the correct values for those you can use the azimut and altitude devices that will be created. Just note the degrees values at the time you want to have your sunscreen closed. <br/>
+        See for more indormation the external link above. <br/><br/>
+        Fill in your domoticz ip and port.<br/>
         Fill in how often the sunscreen device should change.<br/>
         Fill in your azimut thresholds in this order: Azimut low;Azimut high.<br/>
         Fill in your altitude thresholds in this order: Altitude low; Altitude mid; Altitude high.<br/>
-        If you have no idea what to fill in into this fields, you can leave them empty. <br/>
-        An azimut and altitude device will be created. You can use those to note the degrees value when you want to have your sunscreen closed. <br/>
-        The sunscreen will be half closed if the altitude is between Altitude  mid and altitude high.<br/>
-        See for more indormation the external link above. <br/>
+        The sunscreen will be half closed if the altitude is between Altitude  mid and altitude high, it will be fully closed if the altitude is between Altitude  low and altitude mid.<br/>
         If you need more sunscreens, just add 5 extra sun thresholds like this:<br/>
         Azimut1 low;Azimut1 high; Azimut2 low;Azimut2 high.<br/>
         Altitude1 low; Altitude1 mid; Altidtude1 high; Altitude2 low; Altitude2 mid; Altidtude2 high.<br/>
@@ -35,16 +35,16 @@
         Fill in your IDX values as found on the devices table in this order: Pressure device IDX;Temperature device IDX;Wind device IDX;Rain device IDX.<br/>
     </description>
     <params>
-        <param field="Address"  label="Domoticz IP Address" width="200px" required="true" default="127.0.0.1"/>
-        <param field="Port"     label="Domoticz Port" width="100px" required="true" default="8080"/>
-        <param field="Mode1" label="Switchtime threshold (minutes)" width="100px" required="true" default="30"/>
+        <param field="Address"  label="Domoticz IP Address and port" width="200px" required="true" default="127.0.0.1:8080"/>
+        <param field="Port" label="Switchtime threshold (minutes)" width="100px" required="true" default="30"/>
         <param field="Mode2" label="Azimut thresholds" width="500px" default="Azimut low;Azimut high"/>
         <param field="Password" label="Altitude thresholds" default="Altitude low; Altitude mid; Altidtude high" width="500px"/>
         <param field="Mode3" label="LUX thresholds" width="500px" default="60000;80000"/>
         <param field="Mode4" label="Temp thresholds" width="100px" default="10;15"/>
         <param field="Mode5" label="Wind thresholds" width="100px" default="10;15"/>
         <param field="Username" label="Rain threshold" width="50px" default="0"/>
-        <param field="Mode6" label="Wheather devices IDX numbers" width="1000px" default="Pressure device IDX;Temperature device IDX;Wind device IDX;Rain device IDX"/>
+        <param field="Mode6" label="Wheather devices IDX numbers" width="1000px" default="Pressure device IDX;Wind device IDX;Temperature device IDX;Rain device IDX"/>
+        <param field="Mode1"  label="Ogimet Station" width="100px"/>
     </params>
 </plugin>
 """
@@ -65,6 +65,7 @@ import calendar
 import requests
 from multiprocessing import Process, Queue
 import time
+import sqlite3
 
 #############################################################################
 #                      Sunscreen Class                                      #
@@ -201,11 +202,6 @@ class BasePlugin:
                 self.Latitude                   = float(loc[0])
                 self.Longitude                  = float(loc[1])
                 Domoticz.Log("Current location is "+str(self.Latitude)+","+str(self.Longitude))
-                self.q1                         = Queue()
-                self.p1                         = Process(target=self.FindStation, args=(self.q1,))
-                self.p1.deamon                  = True
-                self.p1.start()
-                Domoticz.Log("Started search for Ogimet station.")
 
                 self.q2                         = Queue()
                 self.p2                         = Process(target=Altitude, args=(self.q2,))
@@ -213,15 +209,30 @@ class BasePlugin:
                 self.p2.start()
                 Domoticz.Log("Started search for Altitude.")
 
-                self.Url                        = "http://"+Parameters["Address"]+":"+Parameters["Port"]
+                self.Url                        = "http://"+Parameters["Address"]
                 if self.Url == "":
                     self.Url                    = "http://127.0.0.1:8080"
 
                 try:
-                    self.SwitchTime             = int(Parameters["Mode1"])
+                    self.SwitchTime             = int(Parameters["Port"])
                 except ValueError:
                     self.SwitchTime             = 30
                     Domoticz.Error("Please specify a number for 'Switchtime' in the hardware settings. Now setting the default to 30 minutes.")
+
+                try:
+                    self.Station                = Parameters["Mode1"]
+                    int(self.Station)
+                except ValueError:
+                    self.Station                = ""
+
+                if self.Station == "":
+                    Domoticz.Station("You did not specify a valid Ogimet station id, will try to find one myself now.")
+                    self.q1                         = Queue()
+                    self.p1                         = Process(target=self.FindStation, args=(self.q1,))
+                    self.p1.deamon                  = True
+                    self.p1.start()
+                    Domoticz.Log("Started search for Ogimet station.")
+
 
                 self.Thresholds                 = {}
                 AzimutThresholds                = Parameters["Mode2"].split(";")
@@ -365,7 +376,7 @@ class BasePlugin:
     def onHeartbeat(self):
         try:
             if self.Error==False:
-                if self.p1.exitcode == None or self.Station=="":
+                if self.Station == "" or (hasattr(self,"p1") and self.p1.exitcode == None):
                     if self.q1.empty()==True:
                         Domoticz.Log("Parsing Ogimet station table data.")
                     else:
@@ -377,6 +388,20 @@ class BasePlugin:
                             elif "Found station " in result:
                                 Domoticz.Log(result)
                                 self.Station=result.split(":")[1].split(" ")[0]
+
+                                try:    
+                                    # Open the Domoticz DB
+                                    db = sqlite3.connect(Parameters["Database"])
+                                    cursor = db.cursor()
+                                    #Store station in DB
+                                    cursor.execute('''UPDATE Hardware SET Mode1 = ? WHERE Extra=? ''',(self.Station,Parameters["Key"]))
+                                    db.commit()
+                                    Domoticz.Status("Stored the station id '" + self.Station + "' in the database.")
+                                except Exception as e:
+                                    senderror(e)
+                                finally:
+                                    # Close the db connection
+                                    db.close()
                             else:
                                 Domoticz.Log(result)
                 if self.Altitude == "":
@@ -524,19 +549,24 @@ class BasePlugin:
                     self.RainIDX                = 0
 
                 #Loop through all devices to find missing devices
+                Found = False
                 for device in self.AllDevices:
                     if "Temp" in device and self.TemperatureIDX == 0:
                         self.TemperatureIDX = device["idx"]
                         Domoticz.Status("Found temperature device '" + device["Name"] + "'")
+                        Found = True
                     if device["Type"] == "Wind" and self.WindIDX == 0:
                         self.WindIDX        = device["idx"]
                         Domoticz.Status("Found wind device '" + device["Name"] + "'")
+                        Found = True
                     elif device["Type"] == "Rain" and self.RainIDX == 0:
                         self.RainIDX        = device["idx"]
                         Domoticz.Status("Found rain device '"+device["Name"] + "'")
+                        Found = True
                     elif "Barometer" in device and self.PressureIDX == 0:
                         self.PressureIDX    = device["idx"]
                         Domoticz.Status("Found pressure device '" + device["Name"] + "'")
+                        Found = True
 
                     if str(self.TemperatureIDX) == device["idx"]:
                         self.Temperature    = float(device["Temp"])
@@ -552,6 +582,23 @@ class BasePlugin:
                     elif str(self.PressureIDX) == device["idx"]:
                         self.Pressure       = float(device["Barometer"])
                         Domoticz.Log("Using '" + device["Name"] +"' to get the presure. Current pressure: " + str(self.Pressure) + " hPa.")
+
+                if Found == True:
+                    #Store found devices in DB
+                    try:
+                        IdxString = str(self.PressureIDX) + ";" + str(self.WindIDX) + ";" + str(self.TemperatureIDX)  + ";" + str(self.RainIDX)
+                        # Open the Domoticz DB
+                        db = sqlite3.connect(Parameters["Database"])
+                        cursor = db.cursor()
+                        #Store station in DB
+                        cursor.execute('''UPDATE Hardware SET Mode6 = ? WHERE Extra = ? ''',(IdxString,Parameters["Key"]))
+                        db.commit()
+                        Domoticz.Status("Stored the device IDX values '" + IdxString + "' in the database.")
+                    except Exception as e:
+                        senderror(e)
+                    finally:
+                        # Close the db connection
+                        db.close()
                 
                 if self.PressureIDX == 0:
                     Domoticz.Error("Please make sure you have a Pressure device available. This plugin cannot function without it.")
