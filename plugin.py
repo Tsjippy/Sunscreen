@@ -2,7 +2,7 @@
 # Author: Tsjippy
 #
 """
-<plugin key="SunScreen" name="Sunscreen plugin" author="Tsjippy" version="1.7.0" wikilink="https://github.com/Tsjippy/Sunscreen" externallink="https://en.wikipedia.org/wiki/Horizontal_coordinate_system">
+<plugin key="SunScreen" name="Sunscreen plugin" author="Tsjippy" version="1.8.0" wikilink="https://github.com/Tsjippy/Sunscreen" externallink="https://en.wikipedia.org/wiki/Horizontal_coordinate_system">
     <description>
         <h2>Sunscreen plugin</h2><br/>
         This plugin calculates the virtual amount of LUX on your current location<br/>
@@ -137,7 +137,7 @@ class Sunscreen:
                                     if _plugin.sunAltitude > self.AlltitudeMid and Devices[self.DeviceID].sValue != 50:
                                         Domoticz.Log ("Half closing '"+Devices[self.DeviceID].Name+"'.")
                                         UpdateDevice(self.DeviceID, 50, "50")
-                                    elif (Devices[self.DeviceID].sValue == "Off") and _plugin.sunAltitude < self.AlltitudeMid:
+                                    elif (Devices[self.DeviceID].sValue == "Off" or Devices[self.DeviceID].sValue == "") and _plugin.sunAltitude < self.AlltitudeMid:
                                         Domoticz.Log ("Full closing '"+Devices[self.DeviceID].Name+"'.")
                                         UpdateDevice(self.DeviceID, 100, "On")
                                     else:
@@ -234,10 +234,10 @@ class BasePlugin:
                     db = sqlite3.connect(Parameters["Database"])
                     cursor = db.cursor()
                     cursor.execute('''SELECT Mode7  FROM Hardware WHERE Extra=? ''',(Parameters["Key"],))
-                    self.Altitude = cursor.fetchone()[0]
+                    self.Altitude = int(cursor.fetchone()[0])
+                    Domoticz.Log("Found altitude of " + str(self.Altitude) + " meter in database.")
                 except Exception as e:
                     senderror(e)
-                    self.Altitude = ""
                 finally:
                     # Close the db connection
                     db.close()
@@ -263,7 +263,7 @@ class BasePlugin:
                     self.Station                = Parameters["Mode1"]
                     int(self.Station)
                 except ValueError:
-                    self.Station                = ""
+                    pass
 
                 if self.Station == "":
                     Domoticz.Status("You did not specify a valid Ogimet station id, will try to find one myself now.")
@@ -315,9 +315,9 @@ class BasePlugin:
                                 Domoticz.Error("Please specify 2, or a multitude of 2 values for 'Azimuth' in the hardware settings. No sunscreen device will be created, until you update the hardware.")
                             
                             try:
-                                self.Thresholds["AlltitudeLow_"+str(i)] = AltitudeThresholds[i*2]
-                                self.Thresholds["AlltitudeMid_"+str(i)] = AltitudeThresholds[i*2+1]
-                                self.Thresholds["AlltitudeHigh_"+str(i)] = AltitudeThresholds[i*2+2]
+                                self.Thresholds["AlltitudeLow_"+str(i)] = AltitudeThresholds[i*3]
+                                self.Thresholds["AlltitudeMid_"+str(i)] = AltitudeThresholds[i*3+1]
+                                self.Thresholds["AlltitudeHigh_"+str(i)] = AltitudeThresholds[i*3+2]
                             except IndexError:
                                 if len(AltitudeThresholds) == 3 and i > 0:
                                     Domoticz.Status("You specified multiple azimuth values, but only 3 altitude values. I will reuse these three for all other sunscreens.")
