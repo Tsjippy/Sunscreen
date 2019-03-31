@@ -111,8 +111,14 @@ class Sunscreen:
     def CheckOpen(self):
         try:
             fmt = '%Y-%m-%d %H:%M:%S'
-            d1 = datetime.datetime.strptime(Devices[self.DeviceID].LastUpdate, fmt)
-            d2 = datetime.datetime.strptime(str(datetime.datetime.now().replace(second=0, microsecond=0)), fmt)
+            try:
+                d1 = datetime.datetime.strptime(Devices[self.DeviceID].LastUpdate, fmt)
+            except TypeError:
+                d1 = datetime.datetime(*(time.strptime(Devices[self.DeviceID].LastUpdate, fmt)[0:6]))
+            try:
+                d2 = datetime.datetime.strptime(str(datetime.datetime.now().replace(second=0, microsecond=0)), fmt)
+            except TypeError:
+                d2 = datetime.datetime(*(time.strptime(str( datetime.datetime.now().replace(second=0, microsecond=0)), fmt)[0:6]))
             LastChanged=int(round((d2-d1).seconds/60))
             
             #Only change when last change was more than x minutes ago
@@ -121,9 +127,9 @@ class Sunscreen:
                 if _plugin.Azimuth > self.AzimutLow and _plugin.Azimuth < self.AzimutHigh and _plugin.sunAltitude > self.AltitudeLow and _plugin.sunAltitude < self.AlltitudeHigh:
                     Domoticz.Log("Sun is in region")
                     #Only close if weather is ok
-                    if _plugin.Wind <= _plugin.Thresholds["wind"]:
-                        if _plugin.Gust <= _plugin.Thresholds["gust"]:
-                            if _plugin.Rain <= _plugin.Thresholds["rain"]:
+                    if _plugin.Wind <= _plugin.Thresholds["Wind"]:
+                        if _plugin.Gust <= _plugin.Thresholds["Gust"]:
+                            if _plugin.Rain <= _plugin.Thresholds["Rain"]:
                                 if _plugin.weightedLux > self.LuxHigh or _plugin.Temperature > _plugin.Thresholds["TempHigh"]:
                                     #--------------------   Close sunscreen   -------------------- 
                                     if _plugin.sunAltitude > self.AlltitudeMid and Devices[self.DeviceID].sValue != 50:
