@@ -154,7 +154,7 @@ class Sunscreen:
                 else:
                     Domoticz.Log("No need to close the '"+Devices[self.DeviceID].Name+"'.")
             else:
-                Domoticz.Log("Last change was less than "+_plugin.SwitchTime+" minutes ago, no action will be performed.")
+                Domoticz.Log("Last change was less than "+str(_plugin.SwitchTime)+" minutes ago, no action will be performed.")
         except Exception as e:
             senderror(e)
 
