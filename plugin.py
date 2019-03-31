@@ -30,22 +30,23 @@
         If you need more sunscreens, just add 5 extra sun thresholds like this:<br/>
         Azimut1 low;Azimut1 high; Azimut2 low;Azimut2 high.<br/>
         Altitude1 low; Altitude1 mid; Altidtude1 high; Altitude2 low; Altitude2 mid; Altidtude2 high.<br/>
-        Fill in your LUX thresholds in this order: Lux low; Lux high.<br/>
-        Fill in your temperature (°C) thresholds in this order: Temp low; Temp high.<br/>
-        Fill in your wind (m/s) thresholds in this order: Wind; Gust.<br/>
-        Fill in your rain (mm) threshold.<br/>
-        Fill in your IDX values as found on the devices table in this order: Pressure device IDX;Temperature device IDX;Wind device IDX;Rain device IDX.<br/>
+        Fill in your LUX thresholds in this order: Lux low; Lux high (Optional).<br/>
+        Fill in your temperature (°C) thresholds in this order: Temp low; Temp high (Optional).<br/>
+        Fill in your wind (m/s) thresholds in this order: Wind; Gust (Optional).<br/>
+        Fill in your rain (mm) threshold (Optional).<br/>
+        Fill in your IDX values as found on the devices table in this order: Pressure device IDX;Temperature device IDX;Wind device IDX;Rain device IDX (Optional).<br/>
+        Fill in an valid ogimet station id, see https://www.ogimet.com/index.phtml.en.<br/>
     </description>
     <params>
         <param field="Address"  label="Domoticz IP Address and port" width="200px" required="true" default="127.0.0.1:8080"/>
         <param field="Port" label="Switchtime threshold (minutes)" width="100px" required="true" default="30"/>
-        <param field="Mode2" label="Azimut thresholds" width="500px" default="Azimut low;Azimut high"/>
-        <param field="Password" label="Altitude thresholds" default="Altitude low; Altitude mid; Altidtude high" width="500px"/>
+        <param field="Mode2" label="Azimut thresholds" width="500px"/>
+        <param field="Password" label="Altitude thresholds" width="500px"/>
         <param field="Mode3" label="LUX thresholds" width="500px" default="60000;80000"/>
-        <param field="Mode4" label="Temp thresholds" width="100px" default="10;15"/>
+        <param field="Mode4" label="Temp thresholds" width="100px" default="15;25"/>
         <param field="Mode5" label="Wind thresholds" width="100px" default="10;15"/>
         <param field="Username" label="Rain threshold" width="50px" default="0"/>
-        <param field="Mode6" label="Wheather devices IDX numbers" width="1000px" default="Pressure device IDX;Wind device IDX;Temperature device IDX;Rain device IDX"/>
+        <param field="Mode6" label="Wheather devices IDX numbers" width="1000px"/>
         <param field="Mode1"  label="Ogimet Station" width="100px"/>
     </params>
 </plugin>
