@@ -125,13 +125,15 @@ class Sunscreen:
             if LastChanged > _plugin.SwitchTime:
                 #Only close sunscreen if the sun is in a specific region
                 if _plugin.Azimuth > self.AzimutLow and _plugin.Azimuth < self.AzimutHigh and _plugin.sunAltitude > self.AltitudeLow and _plugin.sunAltitude < self.AlltitudeHigh:
-                    Domoticz.Log("Sun is in region")
+                    if self.Debug == True:
+                        Domoticz.Log("Sun is in region")
                     #Only close if weather is ok
                     if _plugin.Wind <= _plugin.Thresholds["Wind"]:
                         if _plugin.Gust <= _plugin.Thresholds["Gust"]:
                             if _plugin.Rain <= _plugin.Thresholds["Rain"]:
                                 if _plugin.weightedLux > self.LuxHigh or _plugin.Temperature > _plugin.Thresholds["TempHigh"]:
                                     #--------------------   Close sunscreen   -------------------- 
+                                    Domoticz.Log ("Half closing " + Devices[self.DeviceID].sValue)
                                     if _plugin.sunAltitude > self.AlltitudeMid and Devices[self.DeviceID].sValue != 50:
                                         Domoticz.Log ("Half closing '"+Devices[self.DeviceID].Name+"'.")
                                         UpdateDevice(self.DeviceID, 50, "50")
@@ -154,7 +156,7 @@ class Sunscreen:
                 else:
                     Domoticz.Log("No need to close the '"+Devices[self.DeviceID].Name+"'.")
             else:
-                Domoticz.Log("Last change was less than "+str(_plugin.SwitchTime)+" minutes ago, no action will be performed.")
+                Domoticz.Log("Last change was less than "+_plugin.SwitchTime+" minutes ago, no action will be performed.")
         except Exception as e:
             senderror(e)
 
@@ -199,6 +201,20 @@ class BasePlugin:
             if (os.name == 'nt'):
                 Domoticz.Error("Windows is currently not supported.")
 
+            try:
+                #Add extra field to db
+                db = sqlite3.connect('/home/pi/domoticz/domoticz.db')
+                cursor = db.cursor()
+                cursor.execute('''ALTER TABLE Hardware ADD COLUMN "Mode7" char(50)''')
+                Domoticz.Log("Added extra column to database to store the alitude in")
+            except sqlite3.OperationalError:
+                pass
+            except Exception as e:
+                senderror(e)
+            finally:
+                # Close the db connection
+                db.close()
+
             #############################################################################
             #                      Parameters                                           #
             #############################################################################
@@ -213,11 +229,25 @@ class BasePlugin:
                 self.Longitude                  = float(loc[1])
                 Domoticz.Log("Current location is "+str(self.Latitude)+","+str(self.Longitude))
 
-                self.q2                         = Queue()
-                self.p2                         = Process(target=Altitude, args=(self.q2,))
-                self.p2.deamon                  = True
-                self.p2.start()
-                Domoticz.Log("Started search for Altitude.")
+                #Retrieve ALtitude from database
+                try:
+                    db = sqlite3.connect(Parameters["Database"])
+                    cursor = db.cursor()
+                    cursor.execute('''SELECT Mode7  FROM Hardware WHERE Extra=? ''',(Parameters["Key"],))
+                    self.Altitude = cursor.fetchone()[0]
+                except Exception as e:
+                    senderror(e)
+                    self.Altitude = ""
+                finally:
+                    # Close the db connection
+                    db.close()
+                 
+                if self.Altitude == "":
+                    self.q2                         = Queue()
+                    self.p2                         = Process(target=Altitude, args=(self.q2,))
+                    self.p2.deamon                  = True
+                    self.p2.start()
+                    Domoticz.Log("Started search for Altitude.")
 
                 self.Url                        = "http://"+Parameters["Address"]
                 if self.Url == "":
@@ -422,7 +452,21 @@ class BasePlugin:
                             self.Altitude=1
                             Domoticz.Log("Could not find altitude, using default of 1 meter.")
                         elif "Altitude is " in result:
-                            self.Altitude=int(result.split("Altitude is ")[1])
+                            self.Altitude = int(result.split("Altitude is ")[1])
+                            try:    
+                                # Open the Domoticz DB
+                                db = sqlite3.connect(Parameters["Database"])
+                                cursor = db.cursor()
+                                #Store altitude in DB
+                                cursor.execute('''UPDATE Hardware SET Mode7 = ? WHERE Extra=? ''',(self.Altitude,Parameters["Key"]))
+                                db.commit()
+                                Domoticz.Status("Stored the altitude in the database.")
+                            except Exception as e:
+                                senderror(e)
+                            finally:
+                                # Close the db connection
+                                db.close()
+
                             Domoticz.Log(result+" meter.")
                         else:
                             Domoticz.Log(result)
@@ -791,11 +835,11 @@ def SunLocation():
         UpdateDevice(2, int(round(_plugin.sunAltitude)), int(round(_plugin.sunAltitude)))
         
         #azimut of the Sun
-        _plugin.azimuth = math.acos((math.sin(math.radians(_plugin.Declinaison)) - math.sin(math.radians(_plugin.Latitude)) * math.sin(math.radians(_plugin.sunAltitude))) / (math.cos(math.radians(_plugin.Latitude)) * math.cos(math.radians(_plugin.sunAltitude) ))) * 180 / math.pi 
+        _plugin.Azimuth = math.acos((math.sin(math.radians(_plugin.Declinaison)) - math.sin(math.radians(_plugin.Latitude)) * math.sin(math.radians(_plugin.sunAltitude))) / (math.cos(math.radians(_plugin.Latitude)) * math.cos(math.radians(_plugin.sunAltitude) ))) * 180 / math.pi 
         sinAzimuth = (math.cos(math.radians(_plugin.Declinaison)) * math.sin(math.radians(hourlyAngle))) / math.cos(math.radians(_plugin.sunAltitude))
         if(sinAzimuth<0):
-            _plugin.azimuth=360-_plugin.azimuth 
-        UpdateDevice(1,int(round(_plugin.azimuth)),int(round(_plugin.azimuth)))
+            _plugin.Azimuth=360-_plugin.Azimuth 
+        UpdateDevice(1,int(round(_plugin.Azimuth)),int(round(_plugin.Azimuth)))
     except Exception as e:
         senderror(e)
 
@@ -924,7 +968,8 @@ def Altitude(q,):
             break
         except Exception as e:
             if ("Expecting value" in str(e) or "Connection aborted" in str(e)) and x < 6:
-                q.put("Retrying altitude.")
+                if _plugin.Debug==True:
+                    q.put("Retrying altitude.")
                 time.sleep(10)
                 continue
             #else:
