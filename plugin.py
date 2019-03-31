@@ -35,7 +35,7 @@
         Fill in your wind (m/s) thresholds in this order: Wind; Gust (Optional).<br/>
         Fill in your rain (mm) threshold (Optional).<br/>
         Fill in your IDX values as found on the devices table in this order: Pressure device IDX;Temperature device IDX;Wind device IDX;Rain device IDX (Optional).<br/>
-        Fill in an valid ogimet station id, see https://www.ogimet.com/index.phtml.en.<br/>
+        Fill in an valid ogimet station id, see https://www.ogimet.com/index.phtml.en (Optional).<br/>
     </description>
     <params>
         <param field="Address"  label="Domoticz IP Address and port" width="200px" required="true" default="127.0.0.1:8080"/>
