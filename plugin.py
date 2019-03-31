@@ -2,7 +2,7 @@
 # Author: Tsjippy
 #
 """
-<plugin key="SunScreen" name="Sunscreen plugin" author="Tsjippy" version="1.6.0" wikilink="https://github.com/Tsjippy/Sunscreen" externallink="https://en.wikipedia.org/wiki/Horizontal_coordinate_system">
+<plugin key="SunScreen" name="Sunscreen plugin" author="Tsjippy" version="1.6.1" wikilink="https://github.com/Tsjippy/Sunscreen" externallink="https://en.wikipedia.org/wiki/Horizontal_coordinate_system">
     <description>
         <h2>Sunscreen plugin</h2><br/>
         This plugin calculates the virtual amount of LUX on your current location<br/>
@@ -392,11 +392,12 @@ class BasePlugin:
                         else:
                             Domoticz.Log(result)
                 elif self.Station != "" and self.Altitude != "":
+                    if self.Debug == True:
+                        Domoticz.Log("Updating cloudlayer.")
                     self.q_cloudlayer = Queue()
                     self.p_cloudlayer = Process(target=Cloudlayer, args=(self.q_cloudlayer,))
                     self.p_cloudlayer.deamon=True
                     self.p_cloudlayer.start()
-                    #Domoticz.Log("Updating cloudlayer.")
 
                     DeviceValues = requests.get(self.Url+"/json.htm?type=devices").json()['result']
                     for Value in DeviceValues:
@@ -429,7 +430,7 @@ class BasePlugin:
 
                     VirtualLux()
 
-                    if self.JustSun == False and Devices[5].sValue == "Off":
+                    if self.JustSun == False and Devices[5].sValue != "On":
                         for screen in self.Sunscreens:
                             screen.CheckClose()
                     elif Devices[5].sValue == "On" and self.Debug == True:
