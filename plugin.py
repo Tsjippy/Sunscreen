@@ -116,7 +116,7 @@ class Sunscreen:
             LastChanged=int(round((d2-d1).seconds/60))
             
             #Only change when last change was more than x minutes ago
-            if LastChanged > _plugin.switchtime:
+            if LastChanged > _plugin.SwitchTime:
                 #Only close sunscreen if the sun is in a specific region
                 if _plugin.Azimuth > self.AzimutLow and _plugin.Azimuth < self.AzimutHigh and _plugin.sunAltitude > self.AltitudeLow and _plugin.sunAltitude < self.AlltitudeHigh:
                     Domoticz.Log("Sun is in region")
