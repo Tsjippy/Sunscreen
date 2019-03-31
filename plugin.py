@@ -20,6 +20,8 @@
         But a sunscreen device will only be added if at least the azimuth and altitude thresholds are filled in. <br/>
         To find the correct values for those you can use the azimut and altitude devices that will be created. Just note the degrees values at the time you want to have your sunscreen closed. <br/>
         See for more indormation the external link above. <br/><br/>
+
+        Here is a description how to fill in the fields below.<br/>
         Fill in your domoticz ip and port.<br/>
         Fill in how often the sunscreen device should change.<br/>
         Fill in your azimut thresholds in this order: Azimut low;Azimut high.<br/>
