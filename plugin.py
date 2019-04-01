@@ -129,11 +129,17 @@ class Sunscreen:
                         Domoticz.Log("Sun is in region")
                     #Only close if weather is ok
                     if _plugin.Wind <= _plugin.Thresholds["Wind"]:
+                        if _plugin.Debug == True:
+                            Domoticz.Log("Debug: Wind is ok.")
                         if _plugin.Gust <= _plugin.Thresholds["Gust"]:
+                            if _plugin.Debug == True:
+                                Domoticz.Log("Debug: Gust is ok.")
                             if _plugin.Rain <= _plugin.Thresholds["Rain"]:
+                                if _plugin.Debug == True:
+                                    Domoticz.Log("Debug: Rain is ok.")
                                 if _plugin.weightedLux > self.LuxHigh or _plugin.Temperature > _plugin.Thresholds["TempHigh"]:
                                     #--------------------   Close sunscreen   -------------------- 
-                                    Domoticz.Log ("Half closing " + Devices[self.DeviceID].sValue)
+                                    Domoticz.Log ("S value is " + Devices[self.DeviceID].sValue)
                                     if _plugin.sunAltitude > self.AlltitudeMid and Devices[self.DeviceID].sValue != 50:
                                         Domoticz.Log ("Half closing '"+Devices[self.DeviceID].Name+"'.")
                                         UpdateDevice(self.DeviceID, 50, "50")
@@ -143,20 +149,26 @@ class Sunscreen:
                                     else:
                                         Domoticz.Log("'"+Devices[self.DeviceID].Name+"' is already down.")
                                 else:
-                                    Domoticz.Log("Not closing '"+Devices[self.DeviceID].Name+"' because of the amount of LUX.")
+                                    if _plugin.Debug == True:
+                                        Domoticz.Log("Not closing '"+Devices[self.DeviceID].Name+"' because of the amount of LUX.")
                             else:
-                                Domoticz.Log("Not closing '"+Devices[self.DeviceID].Name+"' because of the rain.")
+                                if _plugin.Debug == True:
+                                    Domoticz.Log("Not closing '"+Devices[self.DeviceID].Name+"' because of the rain.")
                         else:
-                            Domoticz.Log("Not closing '"+Devices[self.DeviceID].Name+"' because of the windgusts.")
+                            if _plugin.Debug == True:
+                                Domoticz.Log("Not closing '"+Devices[self.DeviceID].Name+"' because of the windgusts.")
                     else:
-                        Domoticz.Log("Not closing '"+Devices[self.DeviceID].Name+"' because of the windspeed.")
+                        if _plugin.Debug == True:
+                            Domoticz.Log("Not closing '"+Devices[self.DeviceID].Name+"' because of the windspeed.")
                 #Sun is not in the region
                 elif Devices[self.DeviceID].sValue!="Off":
                     Domoticz.Log("Opening '"+Devices[self.DeviceID].Name+"', as it is no longer needed.")
                 else:
-                    Domoticz.Log("No need to close the '"+Devices[self.DeviceID].Name+"'.")
+                    if _plugin.Debug == True:
+                        Domoticz.Log("No need to close the '"+Devices[self.DeviceID].Name+"'.")
             else:
-                Domoticz.Log("Last change was less than " + str(_plugin.SwitchTime) + " minutes ago, no action will be performed.")
+                if _plugin.Debug == True:
+                    Domoticz.Log("Last change was less than " + str(_plugin.SwitchTime) + " minutes ago, no action will be performed.")
         except Exception as e:
             senderror(e)
 
@@ -218,7 +230,7 @@ class BasePlugin:
             #############################################################################
             #                      Parameters                                           #
             #############################################################################
-            self.Debug                          = False
+            self.Debug                          = True
             #Domoticz.Trace(True)
             if not "Location" in Settings:
                 self.Error="Location not set in Settings, please update your settings."
@@ -227,7 +239,8 @@ class BasePlugin:
                 loc                             = Settings["Location"].split(";")
                 self.Latitude                   = float(loc[0])
                 self.Longitude                  = float(loc[1])
-                Domoticz.Log("Current location is "+str(self.Latitude)+","+str(self.Longitude))
+                if self.Debug == True:
+                    Domoticz.Log("Current location is "+str(self.Latitude)+","+str(self.Longitude))
 
                 #Retrieve ALtitude from database
                 try:
@@ -462,7 +475,7 @@ class BasePlugin:
                                 db.commit()
                                 Domoticz.Status("Stored the altitude in the database.")
                             except Exception as e:
-                                senderror(e)
+                                senderror(str(e))
                             finally:
                                 # Close the db connection
                                 db.close()
