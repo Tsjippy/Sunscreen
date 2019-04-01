@@ -95,20 +95,23 @@ class Sunscreen:
                 
                 ShouldOpen = False
                 if _plugin.Wind > _plugin.Thresholds["Wind"] or _plugin.Gust > _plugin.Thresholds["Gust"]:
-                    Domoticz.Log("Opening '"+Devices[self.DeviceID].Name+"' because of the wind. ("+str(_plugin.Wind)+" m/s).")
+                    Domoticz.Status("Opening '"+Devices[self.DeviceID].Name+"' because of the wind. ("+str(_plugin.Wind)+" m/s).")
                     ShouldOpen = True
                 elif _plugin.Rain > _plugin.Thresholds["Rain"]:
-                    Domoticz.Log("Opening '"+Devices[self.DeviceID].Name+"' because of the rain.("+str(_plugin.Rain)+" mm).")
+                    Domoticz.Status("Opening '"+Devices[self.DeviceID].Name+"' because of the rain.("+str(_plugin.Rain)+" mm).")
                     ShouldOpen = True
                 elif _plugin.weightedLux < self.LuxLow:
-                    Domoticz.Log("Opening '"+Devices[self.DeviceID].Name+"' because of the light intensity. ("+str(round(_plugin.weightedLux))+" lux).")
+                    Domoticz.Status("Opening '"+Devices[self.DeviceID].Name+"' because of the light intensity. ("+str(round(_plugin.weightedLux))+" lux).")
                     ShouldOpen = True
+                else:
+                    if _plugin.Debug == True:
+                        Domoticz.Log("No need to open the screen")
 
                 if ShouldOpen == True:
                     UpdateDevice(self.DeviceID, 0, "Off")
                 else:
                     if _plugin.Debug == True:
-                        Domoticz.Log("Checking if this screen needs to close.")
+                        Domoticz.Log("Checking if " + str(Devices[self.DeviceID].Name) + " screen needs to close.")
                     self.CheckOpen()
         except Exception as e:
             senderror(e)
@@ -131,8 +134,6 @@ class Sunscreen:
                 senderror(e)
 
             LastChanged=int(round((d2-d1).seconds/60))
-
-            Domoticz.Log("Test1")
             
             #Only change when last change was more than x minutes ago
             if LastChanged > _plugin.SwitchTime:
