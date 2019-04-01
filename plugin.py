@@ -542,7 +542,8 @@ class BasePlugin:
                         Domoticz.Log("Override button value is "+str(Devices[5].nValue))
                     if self.JustSun == False and Devices[5].nValue == 0:
                         for screen in self.Sunscreens:
-                            Domoticz.Log("Checking " + str(Devices[screen.DeviceID].Name))
+                            if self.Debug == True:
+                                Domoticz.Log("Checking " + str(Devices[screen.DeviceID].Name))
                             screen.CheckClose()
                     elif Devices[5].nValue == 1 and self.Debug == True:
                         Domoticz.Status("Not performing sunscreen actions as the override button is on.")
