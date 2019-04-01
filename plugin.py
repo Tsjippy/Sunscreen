@@ -2,7 +2,7 @@
 # Author: Tsjippy
 #
 """
-<plugin key="SunScreen" name="Sunscreen plugin" author="Tsjippy" version="1.8.0" wikilink="https://github.com/Tsjippy/Sunscreen" externallink="https://en.wikipedia.org/wiki/Horizontal_coordinate_system">
+<plugin key="SunScreen" name="Sunscreen plugin" author="Tsjippy" version="2.0.0" wikilink="https://github.com/Tsjippy/Sunscreen" externallink="https://en.wikipedia.org/wiki/Horizontal_coordinate_system">
     <description>
         <h2>Sunscreen plugin</h2><br/>
         This plugin calculates the virtual amount of LUX on your current location<br/>
@@ -202,7 +202,7 @@ class Sunscreen:
 class BasePlugin:
     enabled = False
     def __init__(self):
-        self.Debug                              = False
+        self.Debug                              = True
         self.Error                              = False
         self.ArbitraryTwilightLux               = 6.32     # W/m² egal 800 Lux     (the theoritical value is 4.74 but I have more accurate result with 6.32...)
         self.ConstantSolarRadiation             = 1361 # Solar Constant W/m²
@@ -453,6 +453,11 @@ class BasePlugin:
                 else:
                     UpdateDevice(Unit, 1, str(Command))
                 Domoticz.Log("You set the value of " + str(Devices[Unit].Name) + " to: " + str(Command))
+            if Unit == 5 and self.JustSun == False and Command == "Off":
+                for screen in self.Sunscreens:
+                    if self.Debug == True:
+                        Domoticz.Log("Checking sunscreen '" + str(Devices[screen.DeviceID].Name)+"'")
+                    screen.CheckClose()
         except Exception as e:
             senderror(e)
 
@@ -557,7 +562,7 @@ class BasePlugin:
 
                     if self.Debug == True:
                         Domoticz.Log("Just sun is "+str(self.JustSun))
-                        Domoticz.Log("Override button value is "+str(Devices[5].nValue))
+                        Domoticz.Log("Override button value is "+str(Devices[5].sValue))
                     if self.JustSun == False and Devices[5].nValue == 0:
                         for screen in self.Sunscreens:
                             if self.Debug == True:
