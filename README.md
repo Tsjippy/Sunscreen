@@ -4,8 +4,8 @@ Sunscreen plugin for Domoticz
 
 Short summary
 -------------
-This plugin calculates the location of the sun, stores them in devices.
-Calculates the virtual lux based on the sun location, the cloud layer and your altitude.
+This plugin calculates the location of the sun, stores them in devices.<br>
+Calculates the virtual lux based on the sun location, the cloud layer and your altitude.<br>
 
 Installation and setup
 ----------------------
@@ -20,8 +20,8 @@ sudo pip3 install requests
 sudo pip3 install pandas
 sudo apt-get install libatlas-base-dev
 ```
-Also make sure you are on the latest domoticz beta version or DOmoticz won't find requests, or pandas.
-The installation of pandas can take up to 30 minutes.
+Also make sure you are on the latest domoticz beta version or Domoticz won't find requests, or pandas.<br>
+The installation of pandas can take up to 30 minutes.<br>
 
 3) Restart domoticz: 
 ```bash
