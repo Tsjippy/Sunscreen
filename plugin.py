@@ -89,21 +89,26 @@ class Sunscreen:
     def CheckClose(self):
         try:
             # If screen is down, check if it needs to go up due to the wheater
-            if Devices[self.DeviceID].sValue!="Off":
+            if Devices[self.DeviceID].nValue != 0:
+                if _plugin.Debug == True:
+                    Domoticz.Log("Checking if "+str(Devices[self.DeviceID].Name) + " screen needs to open because of the weather.")
+                
                 ShouldOpen = False
                 if _plugin.Wind > _plugin.Thresholds["Wind"] or _plugin.Gust > _plugin.Thresholds["Gust"]:
-                    Domoticz.Status("Opening '"+Devices[self.DeviceID].Name+"' because of the wind. ("+str(_plugin.Wind)+" m/s).")
+                    Domoticz.Log("Opening '"+Devices[self.DeviceID].Name+"' because of the wind. ("+str(_plugin.Wind)+" m/s).")
                     ShouldOpen = True
                 elif _plugin.Rain > _plugin.Thresholds["Rain"]:
-                    Domoticz.Status("Opening '"+Devices[self.DeviceID].Name+"' because of the rain.("+str(_plugin.Rain)+" mm).")
+                    Domoticz.Log("Opening '"+Devices[self.DeviceID].Name+"' because of the rain.("+str(_plugin.Rain)+" mm).")
                     ShouldOpen = True
                 elif _plugin.weightedLux < self.LuxLow:
-                    Domoticz.Status("Opening '"+Devices[self.DeviceID].Name+"' because of the light intensity. ("+str(round(_plugin.weightedLux))+" lux).")
+                    Domoticz.Log("Opening '"+Devices[self.DeviceID].Name+"' because of the light intensity. ("+str(round(_plugin.weightedLux))+" lux).")
                     ShouldOpen = True
 
                 if ShouldOpen == True:
                     UpdateDevice(self.DeviceID, 0, "Off")
                 else:
+                    if _plugin.Debug == True:
+                        Domoticz.Log("Checking if this screen needs to close.")
                     self.CheckOpen()
         except Exception as e:
             senderror(e)
@@ -115,11 +120,19 @@ class Sunscreen:
                 d1 = datetime.datetime.strptime(Devices[self.DeviceID].LastUpdate, fmt)
             except TypeError:
                 d1 = datetime.datetime(*(time.strptime(Devices[self.DeviceID].LastUpdate, fmt)[0:6]))
+            except Exception as e:
+                senderror(e)
+
             try:
                 d2 = datetime.datetime.strptime(str(datetime.datetime.now().replace(second=0, microsecond=0)), fmt)
             except TypeError:
                 d2 = datetime.datetime(*(time.strptime(str( datetime.datetime.now().replace(second=0, microsecond=0)), fmt)[0:6]))
+            except Exception as e:
+                senderror(e)
+
             LastChanged=int(round((d2-d1).seconds/60))
+
+            Domoticz.Log("Test1")
             
             #Only change when last change was more than x minutes ago
             if LastChanged > _plugin.SwitchTime:
@@ -491,6 +504,8 @@ class BasePlugin:
                     self.p_cloudlayer.deamon=True
                     self.p_cloudlayer.start()
 
+                    if self.Debug == True:
+                        Domoticz.Log("Updating wheater devices values.")
                     DeviceValues = requests.get(self.Url+"/json.htm?type=devices").json()['result']
                     for Value in DeviceValues:
                         if Value["idx"] == self.TemperatureIDX:
@@ -522,10 +537,14 @@ class BasePlugin:
 
                     VirtualLux()
 
-                    if self.JustSun == False and Devices[5].sValue != "On":
+                    if self.Debug == True:
+                        Domoticz.Log("Just sun is "+str(self.JustSun))
+                        Domoticz.Log("Override button value is "+str(Devices[5].nValue))
+                    if self.JustSun == False and Devices[5].nValue == 0:
                         for screen in self.Sunscreens:
+                            Domoticz.Log("Checking " + str(Devices[screen.DeviceID].Name))
                             screen.CheckClose()
-                    elif Devices[5].sValue == "On" and self.Debug == True:
+                    elif Devices[5].nValue == 1 and self.Debug == True:
                         Domoticz.Status("Not performing sunscreen actions as the override button is on.")
             else:
                 Domoticz.Error(self.Error)
