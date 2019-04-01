@@ -260,7 +260,9 @@ class BasePlugin:
                     db = sqlite3.connect(Parameters["Database"])
                     cursor = db.cursor()
                     cursor.execute('''SELECT Mode7  FROM Hardware WHERE Extra=? ''',(Parameters["Key"],))
-                    self.Altitude = int(cursor.fetchone()[0])
+                    self.Altitude = cursor.fetchone()[0]
+                    if self.Altitude != 'NoneType':
+                        self.Altitude = int(self.Altitude)
                     Domoticz.Log("Found altitude of " + str(self.Altitude) + " meter in database.")
                 except Exception as e:
                     senderror(e)
