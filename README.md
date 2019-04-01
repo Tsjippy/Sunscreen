@@ -20,6 +20,9 @@ sudo pip3 install requests
 sudo pip3 install pandas
 sudo apt-get install libatlas-base-dev
 ```
+Also make sure you are on the latest domoticz beta version or DOmoticz won't find requests, or pandas.
+The installation of pandas can take up to 30 minutes.
+
 3) Restart domoticz: 
 ```bash
 sudo service domoticz.sh restart
