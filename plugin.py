@@ -2,7 +2,7 @@
 # Author: Tsjippy
 #
 """
-<plugin key="SunScreen" name="Sunscreen plugin" author="Tsjippy" version="1.8.0" wikilink="https://github.com/Tsjippy/Sunscreen" externallink="https://en.wikipedia.org/wiki/Horizontal_coordinate_system">
+<plugin key="SunScreen" name="Sunscreen plugin" author="Tsjippy" version="2.0.0" wikilink="https://github.com/Tsjippy/Sunscreen" externallink="https://en.wikipedia.org/wiki/Horizontal_coordinate_system">
     <description>
         <h2>Sunscreen plugin</h2><br/>
         This plugin calculates the virtual amount of LUX on your current location<br/>
@@ -88,12 +88,12 @@ class Sunscreen:
 
     def CheckClose(self):
         try:
+            ShouldOpen = False
             # If screen is down, check if it needs to go up due to the wheater
             if Devices[self.DeviceID].nValue != 0:
                 if _plugin.Debug == True:
                     Domoticz.Log("Checking if "+str(Devices[self.DeviceID].Name) + " screen needs to open because of the weather.")
-                
-                ShouldOpen = False
+
                 if _plugin.Wind > _plugin.Thresholds["Wind"] or _plugin.Gust > _plugin.Thresholds["Gust"]:
                     Domoticz.Status("Opening '"+Devices[self.DeviceID].Name+"' because of the wind. ("+str(_plugin.Wind)+" m/s).")
                     ShouldOpen = True
@@ -107,12 +107,12 @@ class Sunscreen:
                     if _plugin.Debug == True:
                         Domoticz.Log("No need to open the screen")
 
-                if ShouldOpen == True:
-                    UpdateDevice(self.DeviceID, 0, "Off")
-                else:
-                    if _plugin.Debug == True:
-                        Domoticz.Log("Checking if " + str(Devices[self.DeviceID].Name) + " screen needs to close.")
-                    self.CheckOpen()
+            if ShouldOpen == True:
+                UpdateDevice(self.DeviceID, 0, "Off")
+            else:
+                if _plugin.Debug == True:
+                    Domoticz.Log("Checking if " + str(Devices[self.DeviceID].Name) + " screen needs to close.")
+                self.CheckOpen()
         except Exception as e:
             senderror(e)
 
@@ -127,13 +127,16 @@ class Sunscreen:
                 senderror(e)
 
             try:
-                d2 = datetime.datetime.strptime(str(datetime.datetime.now().replace(second=0, microsecond=0)), fmt)
+                d2 = datetime.datetime.strptime(str(datetime.datetime.now().replace(microsecond=0)), fmt)
             except TypeError:
-                d2 = datetime.datetime(*(time.strptime(str( datetime.datetime.now().replace(second=0, microsecond=0)), fmt)[0:6]))
+                d2 = datetime.datetime(*(time.strptime(str( datetime.datetime.now().replace(microsecond=0)), fmt)[0:6]))
             except Exception as e:
                 senderror(e)
+            
+            LastChanged = int(round((d2-d1).seconds/60))
 
-            LastChanged=int(round((d2-d1).seconds/60))
+            if _plugin.Debug == True:
+                Domoticz.Log("Last change time is "+str(LastChanged) + " minutes.")
             
             #Only change when last change was more than x minutes ago
             if LastChanged > _plugin.SwitchTime:
@@ -153,12 +156,18 @@ class Sunscreen:
                                     Domoticz.Log("Debug: Rain is ok.")
                                 if _plugin.weightedLux > self.LuxHigh or _plugin.Temperature > _plugin.Thresholds["TempHigh"]:
                                     #--------------------   Close sunscreen   -------------------- 
-                                    if _plugin.sunAltitude > self.AlltitudeMid and Devices[self.DeviceID].sValue != str(50):
-                                        Domoticz.Log ("Half closing '"+Devices[self.DeviceID].Name+"'.")
-                                        UpdateDevice(self.DeviceID, 50, "50")
-                                    elif (Devices[self.DeviceID].sValue == "Off" or Devices[self.DeviceID].sValue == "") and _plugin.sunAltitude < self.AlltitudeMid:
-                                        Domoticz.Log ("Full closing '"+Devices[self.DeviceID].Name+"'.")
-                                        UpdateDevice(self.DeviceID, 100, "On")
+                                    if _plugin.sunAltitude > self.AlltitudeMid:
+                                        if Devices[self.DeviceID].sValue != "50":
+                                            Domoticz.Status ("Half closing '"+Devices[self.DeviceID].Name+"'.")
+                                            UpdateDevice(self.DeviceID, 2, "50")
+                                        elif _plugin.Debug == True:
+                                            Domoticz.Log("'"+Devices[self.DeviceID].Name+"' is already half closed.")
+                                    elif _plugin.sunAltitude < self.AlltitudeMid:
+                                        if Devices[self.DeviceID].sValue != "100":
+                                            Domoticz.Status ("Full closing '" + Devices[self.DeviceID].Name + "'.")
+                                            UpdateDevice(self.DeviceID, 2, "100")
+                                        elif _plugin.Debug == True:
+                                            Domoticz.Log("'"+Devices[self.DeviceID].Name+"' is already fully closed.")
                                     else:
                                         Domoticz.Log("'"+Devices[self.DeviceID].Name+"' is already down.")
                                 else:
@@ -191,6 +200,7 @@ class Sunscreen:
 class BasePlugin:
     enabled = False
     def __init__(self):
+        self.Debug                              = False
         self.Error                              = False
         self.ArbitraryTwilightLux               = 6.32     # W/m² egal 800 Lux     (the theoritical value is 4.74 but I have more accurate result with 6.32...)
         self.ConstantSolarRadiation             = 1361 # Solar Constant W/m²
@@ -243,7 +253,6 @@ class BasePlugin:
             #############################################################################
             #                      Parameters                                           #
             #############################################################################
-            self.Debug                          = False
             #Domoticz.Trace(True)
             if not "Location" in Settings:
                 self.Error="Location not set in Settings, please update your settings."
@@ -261,8 +270,10 @@ class BasePlugin:
                     cursor = db.cursor()
                     cursor.execute('''SELECT Mode7  FROM Hardware WHERE Extra=? ''',(Parameters["Key"],))
                     self.Altitude = cursor.fetchone()[0]
-                    if self.Altitude != 'NoneType':
+                    if self.Altitude != None:
                         self.Altitude = int(self.Altitude)
+                    else:
+                        self.Altitude = ""
                     Domoticz.Log("Found altitude of " + str(self.Altitude) + " meter in database.")
                 except Exception as e:
                     senderror(e)
@@ -402,7 +413,7 @@ class BasePlugin:
                 if self.JustSun == False:
                     Domoticz.Log("Will only perform an action every "+str(self.SwitchTime)+" minutes.")
                     for i in range(self.NumberOfSunscreens):
-                        Domoticz.Log("Will only close sunscreen '"+str(Devices[i+6].Name)+"' if the azimuth is between "+str(self.Thresholds["AzimuthLow_"+str(i)])+" and "+str(self.Thresholds["AzimuthHigh_"+str(i)])+" degrees, the altitude is between "+str(self.Thresholds["AlltitudeLow_"+str(i)])+" and "+str(self.Thresholds["AlltitudeHigh_"+str(i)])+" degrees, the temperature is above "+str(self.Thresholds["TempHigh"])+"°C and the amount of lux is above "+str(self.Thresholds["LuxHigh_"+str(i)])+" lux.")
+                        Domoticz.Log("Will only close sunscreen '"+str(Devices[i+6].Name)+"' if the azimuth is between "+str(self.Thresholds["AzimuthLow_"+str(i)])+" and "+str(self.Thresholds["AzimuthHigh_"+str(i)])+" degrees, the altitude is between "+str(self.Thresholds["AlltitudeLow_"+str(i)])+" and "+str(self.Thresholds["AlltitudeHigh_"+str(i)])+" degrees and the amount of lux is above "+str(self.Thresholds["LuxHigh_"+str(i)])+" lux. I will also close the sunscreen if the sun is in region and the temperature is above "+str(self.Thresholds["TempHigh"])+"°C")
                         Domoticz.Log("Will open sunscreen '"+str(Devices[i+6].Name)+"' if the sun is not in the region, it is raining more then " + str(self.Thresholds["Rain"]) + " mm, the temperature drops below "+str(self.Thresholds["TempLow"])+"°C, the wind is more than "+str(self.Thresholds["Wind"])+" m/s, the wind gusts are more than "+str(self.Thresholds["Gust"])+" m/s or the amount of lux is less than "+str(self.Thresholds["LuxLow_"+str(i)])+" lux")
 
                 if self.Debug == True:
@@ -429,14 +440,15 @@ class BasePlugin:
     #Update the sunscreen device
     def onCommand(self, Unit, Command, Level, Hue):
         try:
-            #Domoticz.Log("onCommand called for Unit " + str(Unit) + ": Parameter '" + str(Command) + "', Level: " + str(Level))
             if str(Command)=='Set Level':
                 UpdateDevice(Unit, 2, Level)
+                Domoticz.Log("You set the value of " + str(Devices[Unit].Name) + " to Level: " + str(Level))
             else:
                 if Command == "Off":
                     UpdateDevice(Unit, 0, str(Command))
                 else:
                     UpdateDevice(Unit, 1, str(Command))
+                Domoticz.Log("You set the value of " + str(Devices[Unit].Name) + " to: " + str(Command))
         except Exception as e:
             senderror(e)
 
@@ -549,6 +561,10 @@ class BasePlugin:
                             screen.CheckClose()
                     elif Devices[5].nValue == 1 and self.Debug == True:
                         Domoticz.Status("Not performing sunscreen actions as the override button is on.")
+            elif self.Error == "No pressure device found.":
+                Domoticz.Log("Rechecking for weather devices.")
+                self.Error = False
+                self.CheckWeatherDevices()
             else:
                 Domoticz.Error(self.Error)
         except Exception as e:
@@ -690,7 +706,7 @@ class BasePlugin:
                         db.close()
                 
                 if self.PressureIDX == 0:
-                    Domoticz.Error("Please make sure you have a Pressure device available. This plugin cannot function without it.")
+                    Domoticz.Error("No pressure device found. Please make sure you have one available. This plugin cannot function without it.")
                     self.Error = "No pressure device found."
 
                 if self.JustSun == False:
