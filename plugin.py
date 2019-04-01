@@ -2,7 +2,7 @@
 # Author: Tsjippy
 #
 """
-<plugin key="SunScreen" name="Sunscreen plugin" author="Tsjippy" version="2.0.0" wikilink="https://github.com/Tsjippy/Sunscreen" externallink="https://en.wikipedia.org/wiki/Horizontal_coordinate_system">
+<plugin key="SunScreen" name="Sunscreen plugin" author="Tsjippy" version="1.8.0" wikilink="https://github.com/Tsjippy/Sunscreen" externallink="https://en.wikipedia.org/wiki/Horizontal_coordinate_system">
     <description>
         <h2>Sunscreen plugin</h2><br/>
         This plugin calculates the virtual amount of LUX on your current location<br/>
@@ -10,10 +10,11 @@
 
         <h3>Features</h3>
         <ul style="list-style-type:square">
-            <li>Calculates the current sun location and stores them in Domoticz devices</li>
-            <li>Calculates the virtual LUX and stores it in a Domoticz device</li>
-            <li>Calculates based on your settings if a sunscreen device needs to go open, needs to close, or half closed</li>
-            <li>The sunscreen will go open if the wind, rain  comes above the optional set thresholds, or below the temperature threshold</li>
+            <li>Calculates the current sun location and stores them in Domoticz devices.</li>
+            <li>Calculates the virtual LUX and stores it in a Domoticz device.</li>
+            <li>Calculates based on your settings if a sunscreen device needs to go open, needs to close, or half closed.</li>
+            <li>The sunscreen will go down if the sun is within a given range and either the calculated lux is above a set threshold or the temperature is above a threshold value.</li>
+            <li>The sunscreen will go open if the wind or rain comes above the optional set thresholds, or below the temperature or lux threshold.</li>
         </ul>
         <h3>Configuration</h3>
         You can just add the hardware, no values are required.<br/>
