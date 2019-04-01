@@ -184,8 +184,9 @@ class Sunscreen:
                         if _plugin.Debug == True:
                             Domoticz.Log("Not closing '"+Devices[self.DeviceID].Name+"' because of the windspeed.")
                 #Sun is not in the region
-                elif Devices[self.DeviceID].sValue!="Off":
-                    Domoticz.Log("Opening '"+Devices[self.DeviceID].Name+"', as it is no longer needed.")
+                elif Devices[self.DeviceID].sValue != "0":
+                    Domoticz.Status("Opening '"+Devices[self.DeviceID].Name+"', as the sun is no longer in the region.")
+                    UpdateDevice(self.DeviceID, 2, "0")
                 else:
                     if _plugin.Debug == True:
                         Domoticz.Log("No need to close the '"+Devices[self.DeviceID].Name+"'.")
@@ -410,6 +411,8 @@ class BasePlugin:
                 self.CheckWeatherDevices()
 
                 createDevices()
+
+                RemoveDevices()
                 
                 if self.JustSun == False:
                     Domoticz.Log("Will only perform an action every "+str(self.SwitchTime)+" minutes.")
@@ -1065,6 +1068,18 @@ def createDevices():
 
     Domoticz.Log("Devices check done")
     return
+
+def RemoveDevices():
+    try:
+        global _plugin
+        ToMuchSunscreens = len(Devices) - _plugin.NumberOfSunscreens - 5
+        if ToMuchSunscreens > 0:
+            Domoticz.Log("Going to remove " + str(ToMuchSunscreens) + " devices as they are no longer needed.")
+            for i in range(ToMuchSunscreens):
+                Domoticz.Status("Deleted '" + Devices[i+ToMuchSunscreens+6].Name + "'")
+                Devices[i+ToMuchSunscreens+6].Delete()
+    except Exception as e:
+        senderror(e)
 
 # Synchronise images to match parameter in hardware page
 def UpdateImage(Unit, Logo):
