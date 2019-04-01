@@ -26,6 +26,7 @@ sudo service domoticz.sh restart
 ```
 4) Add hardware, fill in the required fields.
 
+
 Known bugs
 ----------
 * 
