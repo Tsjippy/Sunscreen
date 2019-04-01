@@ -243,7 +243,7 @@ class BasePlugin:
             #############################################################################
             #                      Parameters                                           #
             #############################################################################
-            self.Debug                          = True
+            self.Debug                          = False
             #Domoticz.Trace(True)
             if not "Location" in Settings:
                 self.Error="Location not set in Settings, please update your settings."
