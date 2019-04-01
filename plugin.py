@@ -153,8 +153,7 @@ class Sunscreen:
                                     Domoticz.Log("Debug: Rain is ok.")
                                 if _plugin.weightedLux > self.LuxHigh or _plugin.Temperature > _plugin.Thresholds["TempHigh"]:
                                     #--------------------   Close sunscreen   -------------------- 
-                                    Domoticz.Log ("S value is " + Devices[self.DeviceID].sValue)
-                                    if _plugin.sunAltitude > self.AlltitudeMid and Devices[self.DeviceID].sValue != 50:
+                                    if _plugin.sunAltitude > self.AlltitudeMid and Devices[self.DeviceID].sValue != str(50):
                                         Domoticz.Log ("Half closing '"+Devices[self.DeviceID].Name+"'.")
                                         UpdateDevice(self.DeviceID, 50, "50")
                                     elif (Devices[self.DeviceID].sValue == "Off" or Devices[self.DeviceID].sValue == "") and _plugin.sunAltitude < self.AlltitudeMid:
