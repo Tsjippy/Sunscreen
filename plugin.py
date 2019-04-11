@@ -2,7 +2,7 @@
 # Author: Tsjippy
 #
 """
-<plugin key="SunScreen" name="Sunscreen plugin" author="Tsjippy" version="2.0.0" wikilink="https://github.com/Tsjippy/Sunscreen" externallink="https://en.wikipedia.org/wiki/Horizontal_coordinate_system">
+<plugin key="SunScreen" name="Sunscreen plugin" author="Tsjippy" version="2.1.0" wikilink="https://github.com/Tsjippy/Sunscreen" externallink="https://en.wikipedia.org/wiki/Horizontal_coordinate_system">
     <description>
         <h2>Sunscreen plugin</h2><br/>
         This plugin calculates the virtual amount of LUX on your current location<br/>
@@ -259,7 +259,12 @@ class BasePlugin:
             if not "Location" in Settings:
                 self.Error="Location not set in Settings, please update your settings."
                 Domoticz.Error(self.Error)
-            else:
+
+            if CheckInternet() == False:
+                self.Error = "You do not have a working internet connection."
+                Domoticz.Error(self.Error)
+
+            if self.Error == False:
                 loc                             = Settings["Location"].split(";")
                 self.Latitude                   = float(loc[0])
                 self.Longitude                  = float(loc[1])
@@ -464,7 +469,13 @@ class BasePlugin:
     #Run every 30 seconds
     def onHeartbeat(self):
         try:
-            if self.Error==False:
+            if CheckInternet() == False:
+                self.Error = "You do not have a working internet connection."
+                Domoticz.Error(self.Error)
+            elif CheckInternet() == True and self.Error == "You do not have a working internet connection.":
+                self.Error = False
+
+            if self.Error == False:
                 if self.Station == "" or (hasattr(self,"p1") and self.p1.exitcode == None):
                     if self.q1.empty()==True:
                         Domoticz.Log("Parsing Ogimet station table data.")
@@ -879,6 +890,14 @@ def DumpConfigToLog():
         Domoticz.Debug("Device sValue:   '" + Devices[x].sValue + "'")
         Domoticz.Debug("Device LastLevel: " + str(Devices[x].LastLevel))
     return
+
+def CheckInternet():
+    try:
+        requests.get(url='http://www.google.com/', timeout=5)
+        return True
+    except requests.ConnectionError:
+        Domoticz.Error("You do not have a working internet connection.")
+        return False
 
 def SunLocation():
     try:
