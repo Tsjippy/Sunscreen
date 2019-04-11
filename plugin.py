@@ -202,7 +202,7 @@ class Sunscreen:
 class BasePlugin:
     enabled = False
     def __init__(self):
-        self.Debug                              = True
+        self.Debug                              = False
         self.Error                              = False
         self.ArbitraryTwilightLux               = 6.32     # W/m² egal 800 Lux     (the theoritical value is 4.74 but I have more accurate result with 6.32...)
         self.ConstantSolarRadiation             = 1361 # Solar Constant W/m²
