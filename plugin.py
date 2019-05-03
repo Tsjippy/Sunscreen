@@ -2,7 +2,7 @@
 # Author: Tsjippy
 #
 """
-<plugin key="SunScreen" name="Sunscreen plugin" author="Tsjippy" version="2.1.0" wikilink="https://github.com/Tsjippy/Sunscreen" externallink="https://en.wikipedia.org/wiki/Horizontal_coordinate_system">
+<plugin key="SunScreen" name="Sunscreen plugin" author="Tsjippy" version="2.2.0" wikilink="https://github.com/Tsjippy/Sunscreen" externallink="https://en.wikipedia.org/wiki/Horizontal_coordinate_system">
     <description>
         <h2>Sunscreen plugin</h2><br/>
         This plugin calculates the virtual amount of LUX on your current location<br/>
@@ -91,7 +91,7 @@ class Sunscreen:
         try:
             ShouldOpen = False
             # If screen is down, check if it needs to go up due to the wheater
-            if Devices[self.DeviceID].nValue != 0:
+            if Devices[self.DeviceID].sValue != "0":
                 if _plugin.Debug == True:
                     Domoticz.Log("Checking if "+str(Devices[self.DeviceID].Name) + " screen needs to open because of the weather.")
 
@@ -109,7 +109,7 @@ class Sunscreen:
                         Domoticz.Log("No need to open the screen")
 
             if ShouldOpen == True:
-                UpdateDevice(self.DeviceID, 0, "Off")
+                UpdateDevice(self.DeviceID, 2, "0")
             else:
                 if _plugin.Debug == True:
                     Domoticz.Log("Checking if " + str(Devices[self.DeviceID].Name) + " screen needs to close.")
@@ -609,7 +609,7 @@ class BasePlugin:
                 try:
                     self.PressureIDX            = int(Parameters["Mode6"].split(";")[0])
                     DeviceDetails = [x for x in self.AllDevices if x["idx"] == str(self.PressureIDX)][0]
-                    if DeviceDetails["SubType"] != 'Barometer':
+                    if DeviceDetails["SubType"] != 'Barometer' and "Barometer" in DeviceDetails == False:
                         Domoticz.Error("You did specify a " + DeviceDetails["SubType"] + " device but it should be a pressure device, containing a Barometer field.")
                         self.PressureIDX        = 0
                 except IndexError:
@@ -893,7 +893,7 @@ def DumpConfigToLog():
 
 def CheckInternet():
     try:
-        requests.get(url='http://www.google.com/', timeout=5)
+        requests.get(url='http://www.google.com/', timeout=3)
         return True
     except requests.ConnectionError:
         Domoticz.Error("You do not have a working internet connection.")
