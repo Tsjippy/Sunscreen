@@ -119,22 +119,7 @@ class Sunscreen:
 
     def CheckOpen(self):
         try:
-            fmt = '%Y-%m-%d %H:%M:%S'
-            try:
-                d1 = datetime.datetime.strptime(Devices[self.DeviceID].LastUpdate, fmt)
-            except TypeError:
-                d1 = datetime.datetime(*(time.strptime(Devices[self.DeviceID].LastUpdate, fmt)[0:6]))
-            except Exception as e:
-                senderror(e)
-
-            try:
-                d2 = datetime.datetime.strptime(str(datetime.datetime.now().replace(microsecond=0)), fmt)
-            except TypeError:
-                d2 = datetime.datetime(*(time.strptime(str( datetime.datetime.now().replace(microsecond=0)), fmt)[0:6]))
-            except Exception as e:
-                senderror(e)
-            
-            LastChanged = int(round((d2-d1).seconds/60))
+            LastChanged = TimeDiff(self.DeviceID)
 
             if _plugin.Debug == True:
                 Domoticz.Log("Last change time is "+str(LastChanged) + " minutes.")
