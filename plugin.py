@@ -437,7 +437,7 @@ class BasePlugin:
         try:
             if str(Command)=='Set Level':
                 UpdateDevice(Unit, 2, Level)
-                Domoticz.Log("You set the value of " + str(Devices[Unit].Name) + " to Level: " + str(Level))
+                Domoticz.Log("You set the value of " + str(Devices[Unit].Name) + " to " + str(Level) + "%")
             else:
                 if Command == "Off":
                     UpdateDevice(Unit, 0, str(Command))
