@@ -2,7 +2,7 @@
 # Author: Tsjippy
 #
 """
-<plugin key="SunScreen" name="Sunscreen plugin" author="Tsjippy" version="2.2.0" wikilink="https://github.com/Tsjippy/Sunscreen" externallink="https://en.wikipedia.org/wiki/Horizontal_coordinate_system">
+<plugin key="SunScreen" name="Sunscreen plugin" author="Tsjippy" version="2.2.1" wikilink="https://github.com/Tsjippy/Sunscreen" externallink="https://en.wikipedia.org/wiki/Horizontal_coordinate_system">
     <description>
         <h2>Sunscreen plugin</h2><br/>
         This plugin calculates the virtual amount of LUX on your current location<br/>
@@ -225,6 +225,7 @@ class BasePlugin:
         self.Temperature                        = 0
         self.Rain                               = 0
         self.Pressure                           = 0
+        self.Timer                              = False
 
         if calendar.isleap(self.Year):
             self.DaysInYear                     = 366
@@ -458,6 +459,12 @@ class BasePlugin:
                 else:
                     UpdateDevice(Unit, 1, str(Command))
                 Domoticz.Log("You set the value of " + str(Devices[Unit].Name) + " to: " + str(Command))
+
+            if Unit == 6:
+                #Turn on the override button for 30 minutes
+                UpdateDevice(5, 1, "On")
+                self.Timer = True
+
             if Unit == 5 and self.JustSun == False and Command == "Off":
                 for screen in self.Sunscreens:
                     if self.Debug == True:
@@ -476,6 +483,15 @@ class BasePlugin:
                 self.Error = False
 
             if self.Error == False:
+                #Check if the override button was automatically set, if so turn if off if needed.
+                if self.Timer == True: 
+                    if TimeDiff(5) >= self.SwitchTime:
+                        UpdateDevice(5, 0, "Off")
+                        self.Timer = False
+                        Domoticz.Log("Turning off override button.")
+                    elif self.Debug == True:
+                        Domoticz.Log("Override button was turned on " + str(TimeDiff(5)) + " minutes ago.")
+
                 if self.Station == "" or (hasattr(self,"p1") and self.p1.exitcode == None):
                     if self.q1.empty()==True:
                         Domoticz.Log("Parsing Ogimet station table data.")
@@ -898,6 +914,26 @@ def CheckInternet():
     except requests.ConnectionError:
         Domoticz.Error("You do not have a working internet connection.")
         return False
+
+def TimeDiff(DeviceID):
+    global _plugin
+    fmt = '%Y-%m-%d %H:%M:%S'
+    try:
+        d1 = datetime.datetime.strptime(Devices[DeviceID].LastUpdate, fmt)
+    except TypeError:
+        d1 = datetime.datetime(*(time.strptime(Devices[DeviceID].LastUpdate, fmt)[0:6]))
+    except Exception as e:
+        senderror(e)
+
+    try:
+        d2 = datetime.datetime.strptime(str(datetime.datetime.now().replace(microsecond=0)), fmt)
+    except TypeError:
+        d2 = datetime.datetime(*(time.strptime(str( datetime.datetime.now().replace(microsecond=0)), fmt)[0:6]))
+    except Exception as e:
+        senderror(e)
+
+    LastChanged = int(round((d2-d1).seconds/60))
+    return LastChanged
 
 def SunLocation():
     try:
