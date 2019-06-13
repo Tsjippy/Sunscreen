@@ -2,7 +2,7 @@
 # Author: Tsjippy
 #
 """
-<plugin key="SunScreen" name="Sunscreen plugin" author="Tsjippy" version="2.2.1" wikilink="https://github.com/Tsjippy/Sunscreen" externallink="https://en.wikipedia.org/wiki/Horizontal_coordinate_system">
+<plugin key="SunScreen" name="Sunscreen plugin" author="Tsjippy" version="2.3.0" wikilink="https://github.com/Tsjippy/Sunscreen" externallink="https://en.wikipedia.org/wiki/Horizontal_coordinate_system">
     <description>
         <h2>Sunscreen plugin</h2><br/>
         This plugin calculates the virtual amount of LUX on your current location<br/>
@@ -248,7 +248,7 @@ class BasePlugin:
 
             if CheckInternet() == False:
                 self.Error = "You do not have a working internet connection."
-                Domoticz.Error(self.Error)
+                #Domoticz.Error(self.Error)
 
             if self.Error == False:
                 loc                             = Settings["Location"].split(";")
@@ -466,6 +466,7 @@ class BasePlugin:
                 Domoticz.Error(self.Error)
             elif CheckInternet() == True and self.Error == "You do not have a working internet connection.":
                 self.Error = False
+                Domoticz.Error("Your internet connection is back.")
 
             if self.Error == False:
                 #Check if the override button was automatically set, if so turn if off if needed.
@@ -863,6 +864,9 @@ _plugin = BasePlugin()
 
 def onStart():
     global _plugin
+    while CheckInternet() == False:
+        print("You do not have a working internet connection.")
+        time.sleep(100)
     _plugin.onStart()
 
 def onStop():
